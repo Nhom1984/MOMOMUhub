@@ -118,6 +118,14 @@ let gameState = "loading"; // loading, menu, mode, musicmem_rules, musicmem, mem
 let menuButtons = [], modeButtons = [], musicMemRulesButtons = [], musicMemButtons = [], memoryMenuButtons = [], memoryClassicRulesButtons = [], memoryClassicButtons = [], memoryMemomuRulesButtons = [], memoryMemomuButtons = [], monluckButtons = [], battleButtons = [], leaderboardButtons = [];
 let soundOn = true;
 
+// --- WALLET CONNECTION STATE ---
+// Manages MetaMask wallet connection for blockchain integration
+let walletConnection = {
+  isConnected: false,
+  address: null,
+  provider: null
+};
+
 // --- LEADERBOARD STATE ---
 let leaderboard = {
   currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu
@@ -352,9 +360,17 @@ function saveHighScores() {
   }
 }
 
+/**
+ * Adds a high score entry with optional wallet address
+ * @param {string} mode - Game mode (musicMemory, memoryClassic, memoryMemomu)
+ * @param {number} score - Player's score
+ * @param {string} name - Player's name (optional)
+ */
 function addHighScore(mode, score, name = null) {
   const timestamp = new Date().toISOString();
-  const entry = { score, timestamp, name };
+  // Include wallet address if connected for blockchain integration
+  const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
+  const entry = { score, timestamp, name, walletAddress };
 
   if (!highScores[mode]) highScores[mode] = [];
   highScores[mode].push(entry);
@@ -378,6 +394,103 @@ function isTopTenScore(mode, score) {
 function getTopScore(mode) {
   if (!highScores[mode] || highScores[mode].length === 0) return 0;
   return highScores[mode][0].score;
+}
+
+// --- WALLET CONNECTION FUNCTIONS ---
+/**
+ * Connects to MetaMask wallet
+ * @returns {boolean} True if connection successful, false otherwise
+ */
+async function connectWallet() {
+  try {
+    // Check if MetaMask is installed
+    if (typeof window.ethereum === 'undefined') {
+      alert('MetaMask is not installed. Please install MetaMask to connect your wallet.');
+      return false;
+    }
+
+    // Request account access - this triggers MetaMask popup
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts',
+    });
+
+    if (accounts.length > 0) {
+      walletConnection.isConnected = true;
+      walletConnection.address = accounts[0];
+      // Store ethereum provider for future interactions
+      walletConnection.provider = window.ethereum;
+      
+      // Listen for account changes (user switches accounts)
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('disconnect', handleWalletDisconnect);
+      
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error connecting to MetaMask:', error);
+    if (error.code === 4001) {
+      // User rejected the request
+      alert('Wallet connection was rejected. You can still play without connecting.');
+    } else {
+      alert('Error connecting to wallet. You can still play without connecting.');
+    }
+    return false;
+  }
+}
+
+/**
+ * Handles MetaMask account changes
+ * @param {string[]} accounts - Array of account addresses
+ */
+function handleAccountsChanged(accounts) {
+  if (accounts.length === 0) {
+    // User disconnected
+    walletConnection.isConnected = false;
+    walletConnection.address = null;
+    walletConnection.provider = null;
+  } else {
+    // User switched accounts
+    walletConnection.address = accounts[0];
+  }
+}
+
+/**
+ * Handles wallet disconnect
+ */
+function handleWalletDisconnect() {
+  walletConnection.isConnected = false;
+  walletConnection.address = null;
+  walletConnection.provider = null;
+}
+
+/**
+ * Formats wallet address for display (shows first 6 and last 4 characters)
+ * @param {string} address - Full wallet address
+ * @returns {string} Shortened address format
+ */
+function getShortAddress(address) {
+  if (!address) return '';
+  return address.slice(0, 6) + '...' + address.slice(-4);
+}
+
+// --- TEST FUNCTION FOR WALLET INTEGRATION ---
+function testWalletIntegration() {
+  // Simulate wallet connection for testing
+  walletConnection.isConnected = true;
+  walletConnection.address = '0x1234567890123456789012345678901234567890';
+  
+  // Add some test high scores with and without wallet addresses
+  addHighScore('musicMemory', 150, 'TestPlayer1');
+  
+  walletConnection.address = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+  addHighScore('musicMemory', 200, 'TestPlayer2');
+  
+  walletConnection.isConnected = false;
+  walletConnection.address = null;
+  addHighScore('musicMemory', 100, 'TestPlayer3');
+  
+  console.log('Test data added to leaderboard with mixed wallet connections');
 }
 
 // --- GAME OVER OVERLAY FUNCTIONS ---
@@ -636,12 +749,12 @@ function drawLeaderboard() {
   if (scores.length === 0) {
     ctx.fillText("No scores yet!", WIDTH / 2, HEIGHT / 2);
   } else {
-    // Header
+    // Header - includes wallet address column for blockchain integration
     ctx.font = "20px Arial";
     ctx.fillStyle = "#666";
-    ctx.fillText("Rank    Name    Score", WIDTH / 2, 220);
+    ctx.fillText("Rank    Name    Score    Wallet", WIDTH / 2, 220);
 
-    // Scores list
+    // Scores list - displays wallet addresses when available
     ctx.font = "18px Arial";
     for (let i = 0; i < Math.min(scores.length, 10); i++) {
       const score = scores[i];
@@ -649,6 +762,8 @@ function drawLeaderboard() {
       const rank = i + 1;
       const name = score.name || "Anonymous";
       const scoreText = score.score;
+      // Show shortened wallet address if player had connected wallet
+      const walletText = score.walletAddress ? getShortAddress(score.walletAddress) : "";
 
       // Highlight top 3
       if (rank <= 3) {
@@ -657,10 +772,10 @@ function drawLeaderboard() {
         ctx.fillStyle = "#333";
       }
       if (rank <= 3) {
-        ctx.fillText("🏆", WIDTH / 2 - 140, y);
+        ctx.fillText("🏆", WIDTH / 2 - 200, y);
       }
 
-      ctx.fillText(`${rank}.    ${name}    ${scoreText}`, WIDTH / 2, y);
+      ctx.fillText(`${rank}.    ${name}    ${scoreText}    ${walletText}`, WIDTH / 2, y);
     }
   }
 
@@ -730,12 +845,15 @@ function endBattleGame() {
 
 // --- BUTTONS SETUP ---
 function setupButtons() {
+  // Main menu buttons - Connect Wallet added above sound button
   menuButtons = [
     new Button("NEW GAME", WIDTH / 2, 400, 240, 70),
+    new Button("CONNECT WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
     new Button("", WIDTH - 100, 40, 55, 44, "sound"),
     new Button("LEADERBOARD", WIDTH / 2, 480, 240, 70),
     new Button("QUIT", WIDTH / 2, 560, 150, 60),
   ];
+  // Mode selection buttons - Connect Wallet added above sound button
   let modeY = 295 + 85;
   let modeGap = 60;
   modeButtons = [
@@ -743,6 +861,7 @@ function setupButtons() {
     new Button("MEMORY", WIDTH / 2, modeY + modeGap, 200, 50),
     new Button("MONLUCK", WIDTH / 2, modeY + modeGap * 2, 200, 50),
     new Button("BATTLE", WIDTH / 2, modeY + modeGap * 3, 200, 50),
+    new Button("CONNECT WALLET", WIDTH - 100, 105, 180, 44),  // MetaMask integration
     new Button("", WIDTH - 100, 55, 55, 44, "sound"),
     new Button("BACK", WIDTH / 2, modeY + modeGap * 4, 150, 50)
   ];
@@ -1549,9 +1668,18 @@ function drawMenu() {
   ctx.font = "48px Arial";
   ctx.textAlign = "center";
   menuButtons.forEach(b => b.draw());
+  
+  // Draw wallet connection status
   ctx.font = "16px Arial";
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = walletConnection.isConnected ? "#00ff00" : "#999";
   ctx.textAlign = "right";
+  if (walletConnection.isConnected) {
+    ctx.fillText("Wallet: " + getShortAddress(walletConnection.address), WIDTH - 35, HEIGHT - 45);
+  } else {
+    ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
+  }
+  
+  ctx.fillStyle = "#fff";
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
 }
 function drawModeMenu() {
@@ -1562,9 +1690,18 @@ function drawModeMenu() {
   ctx.font = "44px Arial";
   ctx.textAlign = "center";
   modeButtons.forEach(b => b.draw());
+  
+  // Draw wallet connection status
   ctx.font = "16px Arial";
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = walletConnection.isConnected ? "#00ff00" : "#999";
   ctx.textAlign = "right";
+  if (walletConnection.isConnected) {
+    ctx.fillText("Wallet: " + getShortAddress(walletConnection.address), WIDTH - 35, HEIGHT - 45);
+  } else {
+    ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
+  }
+  
+  ctx.fillStyle = "#fff";
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
 }
 function drawMemoryMenu() {
@@ -2435,14 +2572,24 @@ canvas.addEventListener("click", function (e) {
   if (gameState === "menu") {
     if (menuButtons[0].isInside(mx, my)) { gameState = "mode"; }
     else if (menuButtons[1].isInside(mx, my)) {
+      // Connect Wallet button - MetaMask integration
+      if (walletConnection.isConnected) {
+        // Already connected, show current connection info
+        alert("Wallet already connected: " + getShortAddress(walletConnection.address));
+      } else {
+        // Attempt to connect to MetaMask
+        connectWallet();
+      }
+    }
+    else if (menuButtons[2].isInside(mx, my)) {
       soundOn = !soundOn;
-      menuButtons[1].label = soundOn ? "SOUND ON" : "SOUND OFF";
+      menuButtons[2].label = soundOn ? "SOUND ON" : "SOUND OFF";
       let music = assets.sounds["music"];
       if (soundOn && music) music.play();
       else if (music) music.pause();
     }
-    else if (menuButtons[2].isInside(mx, my)) { gameState = "leaderboard"; }
-    else if (menuButtons[3].isInside(mx, my)) { window.close(); }
+    else if (menuButtons[3].isInside(mx, my)) { gameState = "leaderboard"; }
+    else if (menuButtons[4].isInside(mx, my)) { window.close(); }
   } else if (gameState === "mode") {
     if (modeButtons[0].isInside(mx, my)) {
       let music = assets.sounds["music"];
@@ -2478,13 +2625,23 @@ canvas.addEventListener("click", function (e) {
       gameState = "battle"; resetBattleGame();
     }
     else if (modeButtons[4].isInside(mx, my)) {
+      // Connect Wallet button - MetaMask integration
+      if (walletConnection.isConnected) {
+        // Already connected, show current connection info
+        alert("Wallet already connected: " + getShortAddress(walletConnection.address));
+      } else {
+        // Attempt to connect to MetaMask
+        connectWallet();
+      }
+    }
+    else if (modeButtons[5].isInside(mx, my)) {
       soundOn = !soundOn;
-      modeButtons[4].label = soundOn ? "SOUND ON" : "SOUND OFF";
+      modeButtons[5].label = soundOn ? "SOUND ON" : "SOUND OFF";
       let music = assets.sounds["music"];
       if (soundOn && music) music.play();
       else if (music) music.pause();
     }
-    else if (modeButtons[5].isInside(mx, my)) { gameState = "menu"; }
+    else if (modeButtons[6].isInside(mx, my)) { gameState = "menu"; }
   } else if (gameState === "musicmem_rules") {
     if (musicMemRulesButtons[0].isInside(mx, my)) {
       gameState = "musicmem";
