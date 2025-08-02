@@ -848,7 +848,7 @@ function setupButtons() {
   // Main menu buttons - Connect Wallet added above sound button
   menuButtons = [
     new Button("NEW GAME", WIDTH / 2, 400, 240, 70),
-    new Button("CONNECT WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
+    new Button("WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
     new Button("", WIDTH - 100, 40, 55, 44, "sound"),
     new Button("LEADERBOARD", WIDTH / 2, 480, 240, 70),
     new Button("QUIT", WIDTH / 2, 560, 150, 60),
