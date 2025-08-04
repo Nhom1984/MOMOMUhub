@@ -47,7 +47,7 @@ for (let i = 1; i <= 6; i++) imageFiles.push({ name: `memimg${i}`, src: `assets/
 for (let i = 1; i <= 37; i++) imageFiles.push({ name: `classicimg${i}`, src: `assets/image${i}.png` });
 imageFiles.push({ name: `classicmonad`, src: `assets/monad.png` });
 // Don't preload fixed mmimg assets, we'll use the available image pool directly
-// Load 16 battle avatars: A-P, R
+// Load  battle avatars: A-P, R
 const avatarLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
 // Add avatar images A-N for MEMOMU Memory expanded pool
 for (let i = 0; i < avatarLetters.length; i++) {
@@ -3091,7 +3091,7 @@ function handleBattleClick(mx, my) {
     for (const rect of battleGame.chooseRects) {
       if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
         battleGame.player = rect.idx;
-        let pool = Array.from({ length: 16 }, (_, i) => i).filter(i => i !== rect.idx);
+        let pool = Array.from({ length: 14 }, (_, i) => i).filter(i => i !== rect.idx);
         battleGame.opponent = pool[Math.floor(Math.random() * pool.length)];
         battleGame.round = 0;
         battleGame.pscore = 0;
