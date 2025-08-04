@@ -860,8 +860,8 @@ function setupButtons() {
     new Button("MEMORY", WIDTH / 2, modeY + modeGap, 200, 50),
     new Button("MONLUCK", WIDTH / 2, modeY + modeGap * 2, 200, 50),
     new Button("BATTLE", WIDTH / 2, modeY + modeGap * 3, 200, 50),
-    new Button("WALLET", WIDTH - 100, 105, 180, 44),  // MetaMask integration
-    new Button("", WIDTH - 100, 55, 55, 44, "sound"),
+    new Button("WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
+    new Button("", WIDTH - 100, 40, 55, 44, "sound"),
     new Button("BACK", WIDTH / 2, modeY + modeGap * 4, 150, 50)
   ];
   musicMemRulesButtons = [
