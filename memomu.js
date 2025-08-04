@@ -657,7 +657,19 @@ function handleGameOverOverlayClick(mx, my) {
         }
       } else if (button.label === "MENU") {
         hideGameOverOverlay();
-        gameState = "menu";
+        // For music memory, classic, and memomu modes, go to mode menu instead of main menu
+        if (gameOverOverlay.mode === "musicMemory" || 
+            gameOverOverlay.mode === "memoryClassic" || 
+            gameOverOverlay.mode === "memoryMemomu") {
+          gameState = "mode";
+        } else {
+          gameState = "menu";
+        }
+        // Restore background music when returning to menu
+        let music = assets.sounds["music"];
+        if (soundOn && music) {
+          music.play();
+        }
       }
       return true;
     }
@@ -2574,8 +2586,18 @@ function drawBattleGrids() {
 // --- CLICK HANDLING ---
 canvas.addEventListener("click", function (e) {
   let rect = canvas.getBoundingClientRect();
-  let mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-  let my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  
+  // Improved coordinate calculation for fullscreen compatibility
+  // Handle potential precision issues in fullscreen mode
+  let scaleX = canvas.width / rect.width;
+  let scaleY = canvas.height / rect.height;
+  
+  let mx = Math.round((e.clientX - rect.left) * scaleX);
+  let my = Math.round((e.clientY - rect.top) * scaleY);
+  
+  // Clamp coordinates to canvas bounds to prevent edge case issues
+  mx = Math.max(0, Math.min(canvas.width - 1, mx));
+  my = Math.max(0, Math.min(canvas.height - 1, my));
 
   // Check game over overlay first - blocks all other interactions
   if (handleGameOverOverlayClick(mx, my)) {
@@ -2661,6 +2683,11 @@ canvas.addEventListener("click", function (e) {
     }
     else if (musicMemRulesButtons[1].isInside(mx, my)) {
       gameState = "mode";
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
     }
   } else if (gameState === "musicmem") {
     if (musicMemButtons[0].isInside(mx, my)) {
@@ -2668,7 +2695,14 @@ canvas.addEventListener("click", function (e) {
         startMemoryPhase();
       }
     }
-    else if (musicMemButtons[1].isInside(mx, my)) { gameState = "mode"; }
+    else if (musicMemButtons[1].isInside(mx, my)) { 
+      gameState = "mode";
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    }
 
     // Handle tile clicks during guessing phase
     if (musicMem.phase === "guessing" && musicMem.allowInput) { // CHANGED: Removed showRoundSplash condition
@@ -2687,7 +2721,14 @@ canvas.addEventListener("click", function (e) {
   } else if (gameState === "memory_menu") {
     if (memoryMenuButtons[0].isInside(mx, my)) { gameState = "memory_classic_rules"; startMemoryGameClassic(); }
     else if (memoryMenuButtons[1].isInside(mx, my)) { gameState = "memory_memomu_rules"; }
-    else if (memoryMenuButtons[2].isInside(mx, my)) { gameState = "mode"; }
+    else if (memoryMenuButtons[2].isInside(mx, my)) { 
+      gameState = "mode";
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    }
   } else if (gameState === "memory_classic_rules") {
     if (!memoryGame.showClassicStartButton && memoryClassicRulesButtons[0].isInside(mx, my)) {
       // "GOT IT" button clicked - transition to grid page with START button
@@ -2707,7 +2748,14 @@ canvas.addEventListener("click", function (e) {
       memomuGame.showGo = true;
     }
   } else if (gameState === "memory_classic") {
-    if (memoryClassicButtons[0].isInside(mx, my)) { gameState = "menu"; }
+    if (memoryClassicButtons[0].isInside(mx, my)) { 
+      gameState = "menu";
+      // Restore background music when returning to main menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    }
 
     // Handle START button click if game hasn't started yet
     if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
@@ -2826,6 +2874,11 @@ canvas.addEventListener("click", function (e) {
     // Handle back button
     if (leaderboardButtons[0].isInside(mx, my)) {
       gameState = "menu";
+      // Restore background music when returning to main menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
     }
   } else if (gameState === "musicmem_post_score") {
     // Handle MENU and PLAY AGAIN buttons in post-score state
@@ -2833,7 +2886,12 @@ canvas.addEventListener("click", function (e) {
     let playAgainButton = new Button("PLAY AGAIN", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50);
 
     if (menuButton.isInside(mx, my)) {
-      gameState = "menu";
+      gameState = "mode";  // Go to mode menu instead of main menu
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
     } else if (playAgainButton.isInside(mx, my)) {
       // Start new Music Memory game immediately
       gameState = "musicmem";
@@ -2847,7 +2905,12 @@ canvas.addEventListener("click", function (e) {
     let playAgainButton = new Button("PLAY AGAIN", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50);
 
     if (menuButton.isInside(mx, my)) {
-      gameState = "menu";
+      gameState = "mode";  // Go to mode menu instead of main menu
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
     } else if (playAgainButton.isInside(mx, my)) {
       // Start new MEMOMU game immediately
       gameState = "memory_memomu";
