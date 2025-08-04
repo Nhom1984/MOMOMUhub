@@ -100,9 +100,23 @@ class Button {
       ctx.textBaseline = "middle";
       ctx.fillText(this.label, this.x, this.y);
     } else {
-      // Only draw the image, no border/fill
+      // Draw the image
       if (assets.images[this.img]) {
         ctx.drawImage(assets.images[this.img], this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+      }
+      
+      // Add ON/OFF overlay for sound button
+      if (this.img === "sound") {
+        ctx.font = "bold 12px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = soundOn ? "#00ff00" : "#ff0000";
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 2;
+        const overlayText = soundOn ? "ON" : "OFF";
+        // Draw text with black outline for better visibility
+        ctx.strokeText(overlayText, this.x, this.y + this.h / 2 - 8);
+        ctx.fillText(overlayText, this.x, this.y + this.h / 2 - 8);
       }
     }
     ctx.restore();
@@ -2588,7 +2602,6 @@ canvas.addEventListener("click", function (e) {
       else if (music) music.pause();
     }
     else if (menuButtons[3].isInside(mx, my)) { gameState = "leaderboard"; }
-    else if (menuButtons[4].isInside(mx, my)) { window.close(); }
   } else if (gameState === "mode") {
     if (modeButtons[0].isInside(mx, my)) {
       let music = assets.sounds["music"];
