@@ -845,15 +845,14 @@ function endBattleGame() {
 
 // --- BUTTONS SETUP ---
 function setupButtons() {
-  // Main menu buttons - Connect Wallet added above sound button
+  // Main menu buttons - Wallet added above sound button
   menuButtons = [
     new Button("NEW GAME", WIDTH / 2, 400, 240, 70),
     new Button("WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
     new Button("", WIDTH - 100, 40, 55, 44, "sound"),
     new Button("LEADERBOARD", WIDTH / 2, 480, 240, 70),
-    new Button("QUIT", WIDTH / 2, 560, 150, 60),
   ];
-  // Mode selection buttons - Connect Wallet added above sound button
+  // Mode selection buttons - Wallet added above sound button
   let modeY = 295 + 85;
   let modeGap = 60;
   modeButtons = [
