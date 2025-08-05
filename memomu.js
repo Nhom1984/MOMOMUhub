@@ -3,6 +3,10 @@
    All assets should be in /assets/ folder.
    Canvas ID must be "gameCanvas", size 800x700.
 */
+
+// Import online leaderboard functions
+import { saveScore, getHighScores } from './leaderboard.js';
+
 // Set canvas size to fixed 800x700
 window.addEventListener('DOMContentLoaded', function () {
   const canvas = document.getElementById('gameCanvas');
@@ -142,11 +146,13 @@ let walletConnection = {
 
 // --- LEADERBOARD STATE ---
 let leaderboard = {
-  currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu
+  currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu, monluck, battle
   tabs: [
     { key: "musicMemory", label: "MUSIC" },
     { key: "memoryClassic", label: "CLASSIC" },
-    { key: "memoryMemomu", label: "MEMOMU" }
+    { key: "memoryMemomu", label: "MEMOMU" },
+    { key: "monluck", label: "MONLUCK" },
+    { key: "battle", label: "BATTLE" }
   ]
 };
 
@@ -169,6 +175,15 @@ let gameOverOverlay = {
 
 // --- HIGH SCORE SYSTEM ---
 let highScores = {
+  musicMemory: [],
+  memoryClassic: [],
+  memoryMemomu: [],
+  monluck: [],
+  battle: []
+};
+
+// --- ONLINE SCORES STORAGE ---
+let onlineScores = {
   musicMemory: [],
   memoryClassic: [],
   memoryMemomu: [],
@@ -380,7 +395,7 @@ function saveHighScores() {
  * @param {number} score - Player's score
  * @param {string} name - Player's name (optional)
  */
-function addHighScore(mode, score, name = null) {
+async function addHighScore(mode, score, name = null) {
   const timestamp = new Date().toISOString();
   // Include wallet address if connected for blockchain integration
   const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
@@ -394,6 +409,24 @@ function addHighScore(mode, score, name = null) {
   highScores[mode] = highScores[mode].slice(0, 10);
 
   saveHighScores();
+
+  // Save to online leaderboard if name is present
+  if (name) {
+    try {
+      const success = await saveScore(mode, score, name, walletAddress);
+      if (success) {
+        console.log('Score saved to online leaderboard successfully');
+        // Show success feedback to user
+        showUserFeedback('Score saved to online leaderboard!', 'success');
+      } else {
+        console.warn('Failed to save score to online leaderboard');
+        showUserFeedback('Failed to save to online leaderboard', 'warning');
+      }
+    } catch (error) {
+      console.error('Error saving to online leaderboard:', error);
+      showUserFeedback('Error saving to online leaderboard', 'error');
+    }
+  }
 }
 
 function isTopTenScore(mode, score) {
@@ -408,6 +441,106 @@ function isTopTenScore(mode, score) {
 function getTopScore(mode) {
   if (!highScores[mode] || highScores[mode].length === 0) return 0;
   return highScores[mode][0].score;
+}
+
+// --- USER FEEDBACK SYSTEM ---
+let userFeedback = {
+  active: false,
+  message: '',
+  type: 'info', // 'success', 'warning', 'error', 'info'
+  timer: 0,
+  duration: 3000 // 3 seconds
+};
+
+/**
+ * Show user feedback message
+ * @param {string} message - Message to display
+ * @param {string} type - Type of message (success, warning, error, info)
+ */
+function showUserFeedback(message, type = 'info') {
+  userFeedback.active = true;
+  userFeedback.message = message;
+  userFeedback.type = type;
+  userFeedback.timer = userFeedback.duration;
+}
+
+/**
+ * Update and draw user feedback
+ */
+function updateUserFeedback() {
+  if (userFeedback.active) {
+    userFeedback.timer -= 16; // Assuming 60fps
+    if (userFeedback.timer <= 0) {
+      userFeedback.active = false;
+    }
+  }
+}
+
+function drawUserFeedback() {
+  if (!userFeedback.active) return;
+
+  const y = 50;
+  const alpha = Math.min(1, userFeedback.timer / 1000); // Fade out in last second
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Background
+  let bgColor = '#333';
+  let textColor = '#fff';
+  switch (userFeedback.type) {
+    case 'success': bgColor = '#4CAF50'; break;
+    case 'warning': bgColor = '#FF9800'; break;
+    case 'error': bgColor = '#F44336'; break;
+    case 'info': bgColor = '#2196F3'; break;
+  }
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(WIDTH / 2 - 200, y - 15, 400, 30);
+
+  ctx.fillStyle = textColor;
+  ctx.font = '16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(userFeedback.message, WIDTH / 2, y + 5);
+
+  ctx.restore();
+}
+
+// --- ONLINE LEADERBOARD FUNCTIONS ---
+/**
+ * Fetch online scores for a specific mode
+ * @param {string} mode - Game mode to fetch scores for
+ */
+async function fetchOnlineScores(mode) {
+  try {
+    showUserFeedback('Loading online scores...', 'info');
+    const scores = await getHighScores(mode, 10);
+    onlineScores[mode] = scores;
+    console.log(`Fetched ${scores.length} online scores for ${mode}`);
+    return true;
+  } catch (error) {
+    console.error(`Error fetching online scores for ${mode}:`, error);
+    showUserFeedback('Failed to load online scores', 'warning');
+    return false;
+  }
+}
+
+/**
+ * Get combined scores (online + local) for display
+ * @param {string} mode - Game mode
+ * @returns {Array} Combined and sorted scores
+ */
+function getCombinedScores(mode) {
+  const online = onlineScores[mode] || [];
+  const local = highScores[mode] || [];
+  
+  // If online scores are available, use them primarily
+  if (online.length > 0) {
+    return online;
+  }
+  
+  // Fallback to local scores
+  return local;
 }
 
 // --- WALLET CONNECTION FUNCTIONS ---
@@ -767,7 +900,7 @@ function drawLeaderboard() {
   }
 
   // Draw leaderboard content
-  const scores = highScores[leaderboard.currentTab] || [];
+  const scores = getCombinedScores(leaderboard.currentTab);
   ctx.font = "24px Arial";
   ctx.fillStyle = "#333";
   ctx.textAlign = "center";
@@ -2637,7 +2770,11 @@ canvas.addEventListener("click", function (e) {
       if (soundOn && music) music.play();
       else if (music) music.pause();
     }
-    else if (menuButtons[3].isInside(mx, my)) { gameState = "leaderboard"; }
+    else if (menuButtons[3].isInside(mx, my)) { 
+      gameState = "leaderboard"; 
+      // Fetch online scores for current tab when leaderboard is opened
+      fetchOnlineScores(leaderboard.currentTab);
+    }
   } else if (gameState === "mode") {
     if (modeButtons[0].isInside(mx, my)) {
       let music = assets.sounds["music"];
@@ -2880,7 +3017,12 @@ canvas.addEventListener("click", function (e) {
     for (let i = 0; i < leaderboard.tabs.length; i++) {
       const x = startX + i * tabWidth;
       if (mx >= x && mx <= x + tabWidth && my >= tabY && my <= tabY + tabHeight) {
-        leaderboard.currentTab = leaderboard.tabs[i].key;
+        const newTab = leaderboard.tabs[i].key;
+        if (newTab !== leaderboard.currentTab) {
+          leaderboard.currentTab = newTab;
+          // Fetch online scores for the new tab
+          fetchOnlineScores(newTab);
+        }
         break;
       }
     }
@@ -3358,6 +3500,10 @@ function draw() {
 
   // Draw name input overlay on top of everything
   drawNameInput();
+  
+  // Update and draw user feedback
+  updateUserFeedback();
+  drawUserFeedback();
 }
 function goFullScreen() {
   var elem = document.getElementById('gameCanvas'); // Replace with your canvas or main game container id
