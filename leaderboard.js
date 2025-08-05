@@ -17,9 +17,10 @@ try {
  * @param {number} score - Player's score
  * @param {string} name - Player's name
  * @param {string} walletAddress - Player's wallet address (optional)
+ * @param {Object} extraData - Additional data for specialized leaderboards (optional)
  * @returns {Promise<boolean>} True if successful, false otherwise
  */
-export async function saveScore(mode, score, name, walletAddress = null) {
+export async function saveScore(mode, score, name, walletAddress = null, extraData = null) {
   if (!db) {
     // Fallback to localStorage for testing
     try {
@@ -31,7 +32,8 @@ export async function saveScore(mode, score, name, walletAddress = null) {
         score,
         name,
         walletAddress,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        ...extraData
       };
       
       existingScores.push(scoreData);
@@ -55,13 +57,66 @@ export async function saveScore(mode, score, name, walletAddress = null) {
       score,
       name,
       walletAddress,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...extraData
     };
 
     await addDoc(collection(db, 'leaderboard'), scoreData);
     return true;
   } catch (error) {
     console.error('Error saving score to Firebase:', error);
+    return false;
+  }
+}
+
+/**
+ * Save specialized leaderboard data (Monluck or Battle)
+ * @param {string} type - 'monluck' or 'battle'
+ * @param {Object} playerData - Player data object
+ * @returns {Promise<boolean>} True if successful, false otherwise
+ */
+export async function saveSpecializedLeaderboard(type, playerData) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const key = `specialized_${type}_leaderboard`;
+      const existingData = JSON.parse(localStorage.getItem(key) || '[]');
+      
+      // Find existing player or create new entry
+      const playerKey = playerData.address || playerData.name;
+      let existingPlayer = existingData.find(p => 
+        (p.address && p.address === playerData.address) || 
+        (!p.address && p.name === playerData.name)
+      );
+      
+      if (existingPlayer) {
+        Object.assign(existingPlayer, playerData);
+      } else {
+        existingData.push(playerData);
+      }
+      
+      localStorage.setItem(key, JSON.stringify(existingData));
+      console.log(`Specialized ${type} leaderboard saved to local storage (fallback)`);
+      return true;
+    } catch (error) {
+      console.error(`Error saving ${type} leaderboard to local storage:`, error);
+      return false;
+    }
+  }
+
+  try {
+    const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const leaderboardData = {
+      type,
+      ...playerData,
+      timestamp: new Date().toISOString()
+    };
+
+    await addDoc(collection(db, 'specializedLeaderboards'), leaderboardData);
+    return true;
+  } catch (error) {
+    console.error(`Error saving ${type} leaderboard to Firebase:`, error);
     return false;
   }
 }
