@@ -4,13 +4,12 @@ import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.0.0/firebase-
 
 // Firebase configuration
 const firebaseConfig = {
-  // Add your Firebase config here
-  apiKey: "your-api-key",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "your-app-id"
+  apiKey: "AIzaSyD0u7UjVX6ug9pA71PtIGUhQ8MQ1K2e-OQ",
+  authDomain: "memomu-15179.firebaseapp.com",
+  projectId: "memomu-15179",
+  storageBucket: "memomu-15179.firebasestorage.app",
+  messagingSenderId: "569095051369",
+  appId: "1:569095051369:web:762b8db6b9f1a987ac2af8"
 };
 
 // Initialize Firebase
