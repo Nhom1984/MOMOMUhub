@@ -122,6 +122,51 @@ export async function saveSpecializedLeaderboard(type, playerData) {
 }
 
 /**
+ * Get specialized leaderboard data (Monluck or Battle)
+ * @param {string} type - 'monluck' or 'battle'
+ * @param {number} limitCount - Number of entries to retrieve (default: 10)
+ * @returns {Promise<Array>} Array of leaderboard objects or empty array on error
+ */
+export async function getSpecializedLeaderboard(type, limitCount = 10) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const key = `specialized_${type}_leaderboard`;
+      const data = JSON.parse(localStorage.getItem(key) || '[]');
+      console.log(`Retrieved ${data.length} ${type} leaderboard entries from local storage (fallback)`);
+      return data.slice(0, limitCount);
+    } catch (error) {
+      console.error(`Error fetching ${type} leaderboard from local storage:`, error);
+      return [];
+    }
+  }
+
+  try {
+    const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const q = query(
+      collection(db, 'specializedLeaderboards'),
+      where('type', '==', type),
+      orderBy(type === 'battle' ? 'winCount' : 'fiveMonadCount', 'desc'),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const data = [];
+    
+    querySnapshot.forEach((doc) => {
+      const docData = doc.data();
+      data.push(docData);
+    });
+    
+    return data;
+  } catch (error) {
+    console.error(`Error fetching ${type} leaderboard from Firebase:`, error);
+    return [];
+  }
+}
+
+/**
  * Get high scores for a specific mode from the online leaderboard
  * @param {string} mode - Game mode (musicMemory, memoryClassic, memoryMemomu, monluck, battle)
  * @param {number} limitCount - Number of scores to retrieve (default: 10)
