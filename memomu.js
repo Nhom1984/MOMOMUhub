@@ -763,49 +763,6 @@ function getShortAddress(address) {
   return address.slice(0, 6) + '...' + address.slice(-4);
 }
 
-// --- TEST FUNCTION FOR LEADERBOARD INTEGRATION ---
-function testLeaderboardIntegration() {
-  // Add some test data to demonstrate leaderboard functionality
-  console.log('Adding test leaderboard data...');
-  
-  // Test Monluck leaderboard
-  monluckLeaderboard.push({
-    name: 'TestPlayer1',
-    address: '0x1234567890123456789012345678901234567890',
-    fiveMonadCount: 3,
-    fourMonadCount: 7,
-    bestStreak: 5,
-    lastPlayed: new Date().toISOString()
-  });
-  
-  monluckLeaderboard.push({
-    name: 'Player2',
-    address: null,
-    fiveMonadCount: 0,
-    fourMonadCount: 12,
-    bestStreak: 8,
-    lastPlayed: new Date().toISOString()
-  });
-  
-  // Test Battle leaderboard
-  battleLeaderboard.push({
-    name: 'BattleChamp',
-    address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-    winCount: 15,
-    lastPlayed: new Date().toISOString()
-  });
-  
-  battleLeaderboard.push({
-    name: 'Warrior',
-    address: null,
-    winCount: 8,
-    lastPlayed: new Date().toISOString()
-  });
-  
-  saveSpecializedLeaderboards();
-  console.log('Test data added to leaderboards');
-}
-
 // --- TEST FUNCTION FOR WALLET INTEGRATION ---
 function testWalletIntegration() {
   // Simulate wallet connection for testing
