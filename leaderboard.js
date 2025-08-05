@@ -1,0 +1,119 @@
+// Online leaderboard functions for MEMOMU game
+// Fallback implementation for environments where Firebase is not available
+
+let db = null;
+
+// Try to initialize Firebase, fallback to mock if not available
+try {
+  const { db: firebaseDb } = await import('./firebase.js');
+  db = firebaseDb;
+} catch (error) {
+  console.warn('Firebase not available, using local storage fallback for online scores');
+}
+
+/**
+ * Save a score to the online leaderboard
+ * @param {string} mode - Game mode (musicMemory, memoryClassic, memoryMemomu, monluck, battle)
+ * @param {number} score - Player's score
+ * @param {string} name - Player's name
+ * @param {string} walletAddress - Player's wallet address (optional)
+ * @returns {Promise<boolean>} True if successful, false otherwise
+ */
+export async function saveScore(mode, score, name, walletAddress = null) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const onlineScoresKey = `onlineScores_${mode}`;
+      const existingScores = JSON.parse(localStorage.getItem(onlineScoresKey) || '[]');
+      
+      const scoreData = {
+        mode,
+        score,
+        name,
+        walletAddress,
+        timestamp: new Date().toISOString()
+      };
+      
+      existingScores.push(scoreData);
+      existingScores.sort((a, b) => b.score - a.score);
+      existingScores.splice(10); // Keep only top 10
+      
+      localStorage.setItem(onlineScoresKey, JSON.stringify(existingScores));
+      console.log('Score saved to local storage (fallback)');
+      return true;
+    } catch (error) {
+      console.error('Error saving score to local storage:', error);
+      return false;
+    }
+  }
+
+  try {
+    const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const scoreData = {
+      mode,
+      score,
+      name,
+      walletAddress,
+      timestamp: new Date().toISOString()
+    };
+
+    await addDoc(collection(db, 'leaderboard'), scoreData);
+    return true;
+  } catch (error) {
+    console.error('Error saving score to Firebase:', error);
+    return false;
+  }
+}
+
+/**
+ * Get high scores for a specific mode from the online leaderboard
+ * @param {string} mode - Game mode (musicMemory, memoryClassic, memoryMemomu, monluck, battle)
+ * @param {number} limitCount - Number of scores to retrieve (default: 10)
+ * @returns {Promise<Array>} Array of score objects or empty array on error
+ */
+export async function getHighScores(mode, limitCount = 10) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const onlineScoresKey = `onlineScores_${mode}`;
+      const scores = JSON.parse(localStorage.getItem(onlineScoresKey) || '[]');
+      console.log(`Retrieved ${scores.length} scores from local storage (fallback)`);
+      return scores.slice(0, limitCount);
+    } catch (error) {
+      console.error('Error fetching scores from local storage:', error);
+      return [];
+    }
+  }
+
+  try {
+    const { collection, getDocs, query, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const q = query(
+      collection(db, 'leaderboard'),
+      orderBy('score', 'desc'),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const scores = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.mode === mode) {
+        scores.push({
+          score: data.score,
+          name: data.name,
+          walletAddress: data.walletAddress,
+          timestamp: data.timestamp
+        });
+      }
+    });
+    
+    // Sort by score descending and return top scores
+    return scores.sort((a, b) => b.score - a.score).slice(0, limitCount);
+  } catch (error) {
+    console.error('Error fetching scores from Firebase:', error);
+    return [];
+  }
+}
