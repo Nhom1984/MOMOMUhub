@@ -1037,20 +1037,25 @@ function fillGridForRound() {
     tile.highlight = false;
   });
 
-  // Place the required images randomly in grid
-  let availablePositions = [...Array(12).keys()];
+  // Create a pool of unique images for the entire grid
+  // Start with the required images
+  let allGridImages = [...usedImages];
+  
+  // Add unique decoy images to fill the remaining slots
+  let availableDecoys = [...musicMem.decoyImages];
+  let remainingSlots = 12 - usedImages.length;
+  
+  // Shuffle decoys and take only what we need for remaining slots
+  availableDecoys = fisherYatesShuffle(availableDecoys);
+  allGridImages = allGridImages.concat(availableDecoys.slice(0, remainingSlots));
+  
+  // Shuffle all images for random placement
+  allGridImages = fisherYatesShuffle(allGridImages);
 
-  for (let imgIdx of usedImages) {
-    let pos = availablePositions.splice(Math.floor(Math.random() * availablePositions.length), 1)[0];
-    musicMem.grid[pos].imageIdx = imgIdx;
-    musicMem.grid[pos].isDecoy = false;
-  }
-
-  // Fill remaining positions with random decoy images
-  for (let pos of availablePositions) {
-    let decoyIdx = musicMem.decoyImages[Math.floor(Math.random() * musicMem.decoyImages.length)];
-    musicMem.grid[pos].imageIdx = decoyIdx; // <-- THIS LINE ENSURES ALL TILES HAVE IMAGES
-    musicMem.grid[pos].isDecoy = true;
+  // Place images in grid positions
+  for (let i = 0; i < 12; i++) {
+    musicMem.grid[i].imageIdx = allGridImages[i];
+    musicMem.grid[i].isDecoy = !usedImages.includes(allGridImages[i]);
   }
 }
 
@@ -1098,7 +1103,7 @@ function playMemorySequence() {
       // Play the note sound for this image
       let noteNum = musicMem.imageAssignments[imgIdx];
       let sfx = assets.sounds[`note${noteNum}`];
-      if (soundOn && sfx) {
+      if (sfx) {
         try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
       }
 
@@ -1159,7 +1164,7 @@ function playDeceptionSequence() {
       // Play a different note or same note for deception
       let noteNum = musicMem.imageAssignments[imgIdx];
       let sfx = assets.sounds[`note${noteNum}`];
-      if (soundOn && sfx) {
+      if (sfx) {
         try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
       }
 
@@ -1255,7 +1260,7 @@ function handleMusicMemTileClick(tileIdx) {
   // Correct click
   let noteNum = musicMem.imageAssignments[tile.imageIdx];
   let sfx = assets.sounds[`note${noteNum}`];
-  if (soundOn && sfx) {
+  if (sfx) {
     try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
   }
 
@@ -1900,8 +1905,10 @@ function drawMusicMemory() {
   if (!musicMem.gameStarted) { // CHANGED: Removed showRoundSplash condition
     musicMemButtons.forEach(b => b.draw());
   } else if (musicMem.gameStarted && musicMem.phase === "guessing") {
-    // Only show MENU button during gameplay
-    musicMemButtons[1].draw();
+    // Only show MENU button during gameplay, but not during score table or name input
+    if (gameState !== "musicmem_post_score" && !nameInput.active) {
+      musicMemButtons[1].draw();
+    }
   }
 
   // Feedback text
@@ -2253,8 +2260,10 @@ function drawMemoryGameMemomu() {
     ctx.fillText(memomuGame.feedback, WIDTH / 2, HEIGHT - 80);
   }
 
-  // MENU button always at bottom (only show if game is not completed, or always show as per requirement)
-  memoryMemomuButtons[1].draw();
+  // MENU button always at bottom (only show if not in post-score state or name input)
+  if (gameState !== "memory_memomu_post_score" && !nameInput.active) {
+    memoryMemomuButtons[1].draw();
+  }
 
   // REMOVED: Splash screen logic - no more splash screens
 
@@ -2588,14 +2597,19 @@ canvas.addEventListener("click", function (e) {
   let rect = canvas.getBoundingClientRect();
   
   // Improved coordinate calculation for fullscreen compatibility
-  // Handle potential precision issues in fullscreen mode
+  // Calculate the actual scaling ratio between canvas and its display size
   let scaleX = canvas.width / rect.width;
   let scaleY = canvas.height / rect.height;
   
-  let mx = Math.round((e.clientX - rect.left) * scaleX);
-  let my = Math.round((e.clientY - rect.top) * scaleY);
+  // Get the click position relative to the canvas element
+  let clickX = e.clientX - rect.left;
+  let clickY = e.clientY - rect.top;
   
-  // Clamp coordinates to canvas bounds to prevent edge case issues
+  // Scale to match canvas coordinates, accounting for potential device pixel ratio
+  let mx = Math.round(clickX * scaleX);
+  let my = Math.round(clickY * scaleY);
+  
+  // Additional safety bounds checking for fullscreen edge cases
   mx = Math.max(0, Math.min(canvas.width - 1, mx));
   my = Math.max(0, Math.min(canvas.height - 1, my));
 
