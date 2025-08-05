@@ -182,6 +182,10 @@ let highScores = {
   battle: []
 };
 
+// --- SPECIALIZED LEADERBOARD SYSTEMS ---
+let monluckLeaderboard = [];  // Array of {name, address, fiveMonadCount, fourMonadCount, bestStreak, lastPlayed}
+let battleLeaderboard = [];   // Array of {name, address, winCount, lastPlayed}
+
 // --- ONLINE SCORES STORAGE ---
 let onlineScores = {
   musicMemory: [],
@@ -295,7 +299,9 @@ let monluckGame = {
   finished: false,
   result: "",
   score: 0,
-  wager: 10
+  wager: 10,
+  currentStreak: 0,  // Track current streak for this session
+  bestSessionStreak: 0  // Best streak in current session
 };
 
 // --- BATTLE MODE DATA ---
@@ -379,6 +385,25 @@ function loadHighScores() {
   if (!highScores.memoryMemomu) highScores.memoryMemomu = [];
   if (!highScores.monluck) highScores.monluck = [];
   if (!highScores.battle) highScores.battle = [];
+
+  // Load specialized leaderboards
+  try {
+    const savedMonluck = localStorage.getItem('memomu_monluck_leaderboard');
+    if (savedMonluck) {
+      monluckLeaderboard = JSON.parse(savedMonluck);
+    }
+  } catch (e) {
+    console.log('Could not load monluck leaderboard:', e);
+  }
+
+  try {
+    const savedBattle = localStorage.getItem('memomu_battle_leaderboard');
+    if (savedBattle) {
+      battleLeaderboard = JSON.parse(savedBattle);
+    }
+  } catch (e) {
+    console.log('Could not load battle leaderboard:', e);
+  }
 }
 
 function saveHighScores() {
@@ -386,6 +411,123 @@ function saveHighScores() {
     localStorage.setItem('memomu_highscores', JSON.stringify(highScores));
   } catch (e) {
     console.log('Could not save high scores:', e);
+  }
+}
+
+function saveSpecializedLeaderboards() {
+  try {
+    localStorage.setItem('memomu_monluck_leaderboard', JSON.stringify(monluckLeaderboard));
+    localStorage.setItem('memomu_battle_leaderboard', JSON.stringify(battleLeaderboard));
+  } catch (e) {
+    console.log('Could not save specialized leaderboards:', e);
+  }
+}
+
+/**
+ * Updates the Monluck leaderboard with player performance
+ * @param {string} playerName - Player's name or "Anonymous"
+ * @param {string} walletAddress - Player's wallet address (optional)
+ * @param {number} monadsFound - Number of monads found (4 or 5)
+ * @param {number} streak - Current streak value
+ */
+async function updateMonluckLeaderboard(playerName, walletAddress, monadsFound, streak) {
+  if (monadsFound < 4) return; // Only track 4+ monad games
+  
+  const playerKey = walletAddress || playerName;
+  let existingPlayer = monluckLeaderboard.find(p => 
+    (p.address && p.address === walletAddress) || 
+    (!p.address && p.name === playerName)
+  );
+  
+  if (!existingPlayer) {
+    existingPlayer = {
+      name: playerName,
+      address: walletAddress,
+      fiveMonadCount: 0,
+      fourMonadCount: 0,
+      bestStreak: streak,
+      lastPlayed: new Date().toISOString()
+    };
+    monluckLeaderboard.push(existingPlayer);
+  }
+  
+  // Update counts
+  if (monadsFound === 5) {
+    existingPlayer.fiveMonadCount++;
+  } else if (monadsFound === 4) {
+    existingPlayer.fourMonadCount++;
+  }
+  
+  // Update best streak
+  existingPlayer.bestStreak = Math.max(existingPlayer.bestStreak, streak);
+  existingPlayer.lastPlayed = new Date().toISOString();
+  
+  // Sort leaderboard: 5-monad players first, then by counts, then by streak
+  monluckLeaderboard.sort((a, b) => {
+    // Players with 5+ monads always rank above those with only 4
+    if (a.fiveMonadCount > 0 && b.fiveMonadCount === 0) return -1;
+    if (b.fiveMonadCount > 0 && a.fiveMonadCount === 0) return 1;
+    
+    // Among 5-monad players, sort by 5-monad count, then 4-monad count
+    if (a.fiveMonadCount > 0 && b.fiveMonadCount > 0) {
+      if (a.fiveMonadCount !== b.fiveMonadCount) return b.fiveMonadCount - a.fiveMonadCount;
+      if (a.fourMonadCount !== b.fourMonadCount) return b.fourMonadCount - a.fourMonadCount;
+      return b.bestStreak - a.bestStreak;
+    }
+    
+    // Among 4-only players, sort by 4-monad count, then streak
+    if (a.fourMonadCount !== b.fourMonadCount) return b.fourMonadCount - a.fourMonadCount;
+    return b.bestStreak - a.bestStreak;
+  });
+  
+  saveSpecializedLeaderboards();
+  
+  // Save to online leaderboard
+  try {
+    const { saveSpecializedLeaderboard } = await import('./leaderboard.js');
+    await saveSpecializedLeaderboard('monluck', existingPlayer);
+  } catch (error) {
+    console.warn('Could not save to online monluck leaderboard:', error);
+  }
+}
+
+/**
+ * Updates the Battle leaderboard with player wins
+ * @param {string} playerName - Player's name or "Anonymous"
+ * @param {string} walletAddress - Player's wallet address (optional)
+ */
+async function updateBattleLeaderboard(playerName, walletAddress) {
+  const playerKey = walletAddress || playerName;
+  let existingPlayer = battleLeaderboard.find(p => 
+    (p.address && p.address === walletAddress) || 
+    (!p.address && p.name === playerName)
+  );
+  
+  if (!existingPlayer) {
+    existingPlayer = {
+      name: playerName,
+      address: walletAddress,
+      winCount: 0,
+      lastPlayed: new Date().toISOString()
+    };
+    battleLeaderboard.push(existingPlayer);
+  }
+  
+  existingPlayer.winCount++;
+  existingPlayer.lastPlayed = new Date().toISOString();
+  
+  // Sort by win count (descending) and keep top 10
+  battleLeaderboard.sort((a, b) => b.winCount - a.winCount);
+  battleLeaderboard = battleLeaderboard.slice(0, 10);
+  
+  saveSpecializedLeaderboards();
+  
+  // Save to online leaderboard
+  try {
+    const { saveSpecializedLeaderboard } = await import('./leaderboard.js');
+    await saveSpecializedLeaderboard('battle', existingPlayer);
+  } catch (error) {
+    console.warn('Could not save to online battle leaderboard:', error);
   }
 }
 
@@ -619,6 +761,49 @@ function handleWalletDisconnect() {
 function getShortAddress(address) {
   if (!address) return '';
   return address.slice(0, 6) + '...' + address.slice(-4);
+}
+
+// --- TEST FUNCTION FOR LEADERBOARD INTEGRATION ---
+function testLeaderboardIntegration() {
+  // Add some test data to demonstrate leaderboard functionality
+  console.log('Adding test leaderboard data...');
+  
+  // Test Monluck leaderboard
+  monluckLeaderboard.push({
+    name: 'TestPlayer1',
+    address: '0x1234567890123456789012345678901234567890',
+    fiveMonadCount: 3,
+    fourMonadCount: 7,
+    bestStreak: 5,
+    lastPlayed: new Date().toISOString()
+  });
+  
+  monluckLeaderboard.push({
+    name: 'Player2',
+    address: null,
+    fiveMonadCount: 0,
+    fourMonadCount: 12,
+    bestStreak: 8,
+    lastPlayed: new Date().toISOString()
+  });
+  
+  // Test Battle leaderboard
+  battleLeaderboard.push({
+    name: 'BattleChamp',
+    address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+    winCount: 15,
+    lastPlayed: new Date().toISOString()
+  });
+  
+  battleLeaderboard.push({
+    name: 'Warrior',
+    address: null,
+    winCount: 8,
+    lastPlayed: new Date().toISOString()
+  });
+  
+  saveSpecializedLeaderboards();
+  console.log('Test data added to leaderboards');
 }
 
 // --- TEST FUNCTION FOR WALLET INTEGRATION ---
@@ -859,6 +1044,21 @@ function drawNameInput() {
   ctx.fillText("Press ENTER to submit or ESC to skip", WIDTH / 2, HEIGHT / 2 + 80);
 }
 
+/**
+ * Get leaderboard data for display based on current tab
+ * @param {string} mode - Current leaderboard tab
+ * @returns {Array} Leaderboard data for display
+ */
+function getLeaderboardData(mode) {
+  if (mode === 'monluck') {
+    return monluckLeaderboard.slice(0, 10); // Top 10 monluck players
+  } else if (mode === 'battle') {
+    return battleLeaderboard.slice(0, 10); // Top 10 battle players
+  } else {
+    return getCombinedScores(mode); // Traditional score-based leaderboards
+  }
+}
+
 // --- LEADERBOARD DRAWING ---
 function drawLeaderboard() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
@@ -899,47 +1099,116 @@ function drawLeaderboard() {
     ctx.fillText(tab.label, x + tabWidth / 2, tabY + tabHeight / 2 + 6);
   }
 
-  // Draw leaderboard content
-  const scores = getCombinedScores(leaderboard.currentTab);
+  // Draw leaderboard content based on current tab
+  const data = getLeaderboardData(leaderboard.currentTab);
   ctx.font = "24px Arial";
   ctx.fillStyle = "#333";
   ctx.textAlign = "center";
 
-  if (scores.length === 0) {
+  if (data.length === 0) {
     ctx.fillText("No scores yet!", WIDTH / 2, HEIGHT / 2);
   } else {
-    // Header - includes wallet address column for blockchain integration
-    ctx.font = "20px Arial";
-    ctx.fillStyle = "#666";
-    ctx.fillText("Rank    Name    Score    Wallet", WIDTH / 2, 220);
-
-    // Scores list - displays wallet addresses when available
-    ctx.font = "18px Arial";
-    for (let i = 0; i < Math.min(scores.length, 10); i++) {
-      const score = scores[i];
-      const y = 250 + i * 30;
-      const rank = i + 1;
-      const name = score.name || "Anonymous";
-      const scoreText = score.score;
-      // Show shortened wallet address if player had connected wallet
-      const walletText = score.walletAddress ? getShortAddress(score.walletAddress) : "";
-
-      // Highlight top 3
-      if (rank <= 3) {
-        ctx.fillStyle = rank === 1 ? "#000" : rank === 2 ? "#000" : "#000";
-      } else {
-        ctx.fillStyle = "#333";
-      }
-      if (rank <= 3) {
-        ctx.fillText("🏆", WIDTH / 2 - 200, y);
-      }
-
-      ctx.fillText(`${rank}.    ${name}    ${scoreText}    ${walletText}`, WIDTH / 2, y);
+    // Draw different headers and content based on leaderboard type
+    if (leaderboard.currentTab === 'monluck') {
+      drawMonluckLeaderboard(data);
+    } else if (leaderboard.currentTab === 'battle') {
+      drawBattleLeaderboard(data);
+    } else {
+      drawTraditionalLeaderboard(data);
     }
   }
 
   // Draw back button
   leaderboardButtons[0].draw();
+}
+
+function drawMonluckLeaderboard(data) {
+  // Header for Monluck leaderboard
+  ctx.font = "18px Arial";
+  ctx.fillStyle = "#666";
+  ctx.fillText("Rank    Name    5-Monads    4-Monads    Best Streak    Wallet", WIDTH / 2, 220);
+
+  // Monluck players list
+  ctx.font = "16px Arial";
+  for (let i = 0; i < Math.min(data.length, 10); i++) {
+    const player = data[i];
+    const y = 250 + i * 30;
+    const rank = i + 1;
+    const name = player.name || "Anonymous";
+    const walletText = player.address ? getShortAddress(player.address) : "";
+
+    // Highlight top 3
+    if (rank <= 3) {
+      ctx.fillStyle = rank === 1 ? "#000" : rank === 2 ? "#000" : "#000";
+    } else {
+      ctx.fillStyle = "#333";
+    }
+    if (rank <= 3) {
+      ctx.fillText("🏆", WIDTH / 2 - 280, y);
+    }
+
+    ctx.fillText(`${rank}.    ${name}    ${player.fiveMonadCount}    ${player.fourMonadCount}    ${player.bestStreak}    ${walletText}`, WIDTH / 2, y);
+  }
+}
+
+function drawBattleLeaderboard(data) {
+  // Header for Battle leaderboard  
+  ctx.font = "20px Arial";
+  ctx.fillStyle = "#666";
+  ctx.fillText("Rank    Name    Wins    Wallet", WIDTH / 2, 220);
+
+  // Battle players list
+  ctx.font = "18px Arial";
+  for (let i = 0; i < Math.min(data.length, 10); i++) {
+    const player = data[i];
+    const y = 250 + i * 30;
+    const rank = i + 1;
+    const name = player.name || "Anonymous";
+    const walletText = player.address ? getShortAddress(player.address) : "";
+
+    // Highlight top 3
+    if (rank <= 3) {
+      ctx.fillStyle = rank === 1 ? "#000" : rank === 2 ? "#000" : "#000";
+    } else {
+      ctx.fillStyle = "#333";
+    }
+    if (rank <= 3) {
+      ctx.fillText("🏆", WIDTH / 2 - 200, y);
+    }
+
+    ctx.fillText(`${rank}.    ${name}    ${player.winCount}    ${walletText}`, WIDTH / 2, y);
+  }
+}
+
+function drawTraditionalLeaderboard(scores) {
+  // Header - includes wallet address column for blockchain integration
+  ctx.font = "20px Arial";
+  ctx.fillStyle = "#666";
+  ctx.fillText("Rank    Name    Score    Wallet", WIDTH / 2, 220);
+
+  // Scores list - displays wallet addresses when available
+  ctx.font = "18px Arial";
+  for (let i = 0; i < Math.min(scores.length, 10); i++) {
+    const score = scores[i];
+    const y = 250 + i * 30;
+    const rank = i + 1;
+    const name = score.name || "Anonymous";
+    const scoreText = score.score;
+    // Show shortened wallet address if player had connected wallet
+    const walletText = score.walletAddress ? getShortAddress(score.walletAddress) : "";
+
+    // Highlight top 3
+    if (rank <= 3) {
+      ctx.fillStyle = rank === 1 ? "#000" : rank === 2 ? "#000" : "#000";
+    } else {
+      ctx.fillStyle = "#333";
+    }
+    if (rank <= 3) {
+      ctx.fillText("🏆", WIDTH / 2 - 200, y);
+    }
+
+    ctx.fillText(`${rank}.    ${name}    ${scoreText}    ${walletText}`, WIDTH / 2, y);
+  }
 }
 
 function restartCurrentGame() {
@@ -1813,6 +2082,14 @@ function nextBattleRoundOrEnd() {
   if (battleGame.round >= 5) {
     battleGame.state = "end";
     battleGame.phase = "end";
+    
+    // Track battle result in leaderboard
+    if (battleGame.pscore > battleGame.oscore) {
+      // Player won the battle
+      const playerName = walletConnection.isConnected ? getShortAddress(walletConnection.address) : "Anonymous";
+      const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
+      updateBattleLeaderboard(playerName, walletAddress);
+    }
   } else {
     // Subsequent rounds should go to ready state to show countdown
     battleGame.phase = "ready";
@@ -3297,12 +3574,32 @@ function handleMonluckTileClick(idx) {
   if (monluckGame.found.length >= 5) {
     monluckGame.result = `YUPI! You found all ${monluckGame.found.length} monads in ${monluckGame.clicks} tries!`;
     monluckGame.finished = true;
+    monluckGame.currentStreak++;
+    monluckGame.bestSessionStreak = Math.max(monluckGame.bestSessionStreak, monluckGame.currentStreak);
+
+    // Track 5-monad achievement in leaderboard
+    const playerName = walletConnection.isConnected ? getShortAddress(walletConnection.address) : "Anonymous";
+    const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
+    updateMonluckLeaderboard(playerName, walletAddress, 5, monluckGame.bestSessionStreak);
 
     // REMOVED: Success splash screen - game ends immediately
   } else if (monluckGame.clicks >= 5) {
     // Game over - 5 tries used up
     monluckGame.result = `Game Over! Found ${monluckGame.found.length}/5 monads in 5 tries. Score: ${monluckGame.score}`;
     monluckGame.finished = true;
+    
+    // Track 4-monad achievement in leaderboard if applicable
+    if (monluckGame.found.length >= 4) {
+      monluckGame.currentStreak++;
+      monluckGame.bestSessionStreak = Math.max(monluckGame.bestSessionStreak, monluckGame.currentStreak);
+      
+      const playerName = walletConnection.isConnected ? getShortAddress(walletConnection.address) : "Anonymous";
+      const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
+      updateMonluckLeaderboard(playerName, walletAddress, 4, monluckGame.bestSessionStreak);
+    } else {
+      // Reset streak for less than 4 monads
+      monluckGame.currentStreak = 0;
+    }
 
     // REMOVED: Game over splash screen - game ends immediately
   }
@@ -3531,6 +3828,10 @@ loadAssets().then(() => {
   setupButtons();
   resetBattleGame();
   loadHighScores(); // Load high scores from localStorage
+  
+  // Initialize test data for demonstration (can be removed in production)
+  testLeaderboardIntegration();
+  
   let music = assets.sounds["music"];
   if (music) { music.loop = true; music.volume = 0.55; if (soundOn) music.play(); }
 });
