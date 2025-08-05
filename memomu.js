@@ -3786,8 +3786,6 @@ loadAssets().then(() => {
   resetBattleGame();
   loadHighScores(); // Load high scores from localStorage
   
-  // Initialize test data for demonstration (can be removed in production)
-  testLeaderboardIntegration();
   
   let music = assets.sounds["music"];
   if (music) { music.loop = true; music.volume = 0.55; if (soundOn) music.play(); }
