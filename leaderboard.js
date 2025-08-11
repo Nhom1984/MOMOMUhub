@@ -105,6 +105,15 @@ export async function saveSpecializedLeaderboard(type, playerData) {
   try {
     const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
     
+    // Ensure fields for monluck and battle are always present
+    if (type === 'monluck') {
+      playerData.fiveMonadCount = playerData.fiveMonadCount ?? 0;
+      playerData.fourMonadCount = playerData.fourMonadCount ?? 0;
+    }
+    if (type === 'battle') {
+      playerData.winCount = playerData.winCount ?? 0;
+    }
+
     const leaderboardData = {
       type,
       ...playerData,
@@ -141,23 +150,38 @@ export async function getSpecializedLeaderboard(type, limitCount = 10) {
 
   try {
     const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-    
-    const q = query(
-      collection(db, 'specializedLeaderboards'),
-      where('type', '==', type),
-      orderBy(type === 'battle' ? 'winCount' : 'fiveMonadCount', 'desc'),
-      limit(limitCount)
-    );
-    
+    let q;
+    if (type === 'battle') {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', type),
+        orderBy('winCount', 'desc'),
+        limit(limitCount)
+      );
+    } else if (type === 'monluck') {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', type),
+        orderBy('fiveMonadCount', 'desc'),
+        orderBy('fourMonadCount', 'desc'),
+        limit(limitCount)
+      );
+    } else {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', type),
+        orderBy('score', 'desc'),
+        limit(limitCount)
+      );
+    }
+
     const querySnapshot = await getDocs(q);
     const data = [];
-    
     querySnapshot.forEach((doc) => {
       const docData = doc.data();
       data.push(docData);
     });
     console.log(`Fetched ${data.length} entries for ${type}:`, data);
-    return data;
     return data;
   } catch (error) {
     console.error(`Error fetching ${type} leaderboard from Firebase:`, error);
