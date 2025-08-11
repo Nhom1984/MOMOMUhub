@@ -156,7 +156,8 @@ export async function getSpecializedLeaderboard(type, limitCount = 10) {
       const docData = doc.data();
       data.push(docData);
     });
-    
+    console.log(`Fetched ${data.length} entries for ${type}:`, data);
+    return data;
     return data;
   } catch (error) {
     console.error(`Error fetching ${type} leaderboard from Firebase:`, error);
