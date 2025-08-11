@@ -211,18 +211,39 @@ export async function getHighScores(mode, limitCount = 10) {
 
   try {
     const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-    const q = query(
-      collection(db, 'specializedLeaderboards'),
-      where('type', '==', mode),
-      orderBy('score', 'desc'),
-      limit(limitCount)
-    );
+    let q;
+    if (mode === 'battle') {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', mode),
+        orderBy('winCount', 'desc'),
+        limit(limitCount)
+      );
+    } else if (mode === 'monluck') {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', mode),
+        orderBy('fiveMonadCount', 'desc'),
+        orderBy('fourMonadCount', 'desc'),
+        limit(limitCount)
+      );
+    } else {
+      q = query(
+        collection(db, 'specializedLeaderboards'),
+        where('type', '==', mode),
+        orderBy('score', 'desc'),
+        limit(limitCount)
+      );
+    }
     const querySnapshot = await getDocs(q);
     const scores = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
       scores.push({
         score: data.score,
+        winCount: data.winCount,
+        fiveMonadCount: data.fiveMonadCount,
+        fourMonadCount: data.fourMonadCount,
         name: data.name,
         walletAddress: data.walletAddress,
         timestamp: data.timestamp
@@ -230,7 +251,7 @@ export async function getHighScores(mode, limitCount = 10) {
     });
     return scores;
   } catch (error) {
-    console.error('Error fetching scores from Firebase:', error);
+    console.error(`Error fetching online scores for ${mode}:`, error);
     return [];
   }
 }
