@@ -28,7 +28,7 @@ export async function saveScore(mode, score, name, walletAddress = null, extraDa
       const existingScores = JSON.parse(localStorage.getItem(onlineScoresKey) || '[]');
       
       const scoreData = {
-        type: mode, // Use type instead of mode for consistency!
+        type: mode, // Use 'type' for consistency!
         score,
         name,
         walletAddress,
@@ -51,21 +51,116 @@ export async function saveScore(mode, score, name, walletAddress = null, extraDa
 
   try {
     const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-    
-const scoreData = {
-  type: mode, // <-- CHANGE 'mode' to 'type' for Firestore field!
-  score,
-  name,
-  walletAddress,
-  timestamp: new Date().toISOString(),
-  ...extraData
-};
-
-await addDoc(collection(db, 'specializedLeaderboards'), scoreData); // <-- CHANGE collection name!
+    const scoreData = {
+      type: mode,
+      score,
+      name,
+      walletAddress,
+      timestamp: new Date().toISOString(),
+      ...extraData
+    };
+    await addDoc(collection(db, 'specializedLeaderboards'), scoreData);
     return true;
   } catch (error) {
     console.error('Error saving score to Firebase:', error);
     return false;
+  }
+}
+
+/**
+ * Save specialized leaderboard data (Monluck or Battle)
+ * @param {string} type - 'monluck' or 'battle'
+ * @param {Object} playerData - Player data object
+ * @returns {Promise<boolean>} True if successful, false otherwise
+ */
+export async function saveSpecializedLeaderboard(type, playerData) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const key = `specialized_${type}_leaderboard`;
+      const existingData = JSON.parse(localStorage.getItem(key) || '[]');
+      
+      // Find existing player or create new entry
+      const playerKey = playerData.address || playerData.name;
+      let existingPlayer = existingData.find(p => 
+        (p.address && p.address === playerData.address) || 
+        (!p.address && p.name === playerData.name)
+      );
+      
+      if (existingPlayer) {
+        Object.assign(existingPlayer, playerData);
+      } else {
+        existingData.push(playerData);
+      }
+      
+      localStorage.setItem(key, JSON.stringify(existingData));
+      console.log(`Specialized ${type} leaderboard saved to local storage (fallback)`);
+      return true;
+    } catch (error) {
+      console.error(`Error saving ${type} leaderboard to local storage:`, error);
+      return false;
+    }
+  }
+
+  try {
+    const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const leaderboardData = {
+      type,
+      ...playerData,
+      timestamp: new Date().toISOString()
+    };
+
+    await addDoc(collection(db, 'specializedLeaderboards'), leaderboardData);
+    return true;
+  } catch (error) {
+    console.error(`Error saving ${type} leaderboard to Firebase:`, error);
+    return false;
+  }
+}
+
+/**
+ * Get specialized leaderboard data (Monluck or Battle)
+ * @param {string} type - 'monluck' or 'battle'
+ * @param {number} limitCount - Number of entries to retrieve (default: 10)
+ * @returns {Promise<Array>} Array of leaderboard objects or empty array on error
+ */
+export async function getSpecializedLeaderboard(type, limitCount = 10) {
+  if (!db) {
+    // Fallback to localStorage for testing
+    try {
+      const key = `specialized_${type}_leaderboard`;
+      const data = JSON.parse(localStorage.getItem(key) || '[]');
+      console.log(`Retrieved ${data.length} ${type} leaderboard entries from local storage (fallback)`);
+      return data.slice(0, limitCount);
+    } catch (error) {
+      console.error(`Error fetching ${type} leaderboard from local storage:`, error);
+      return [];
+    }
+  }
+
+  try {
+    const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+    
+    const q = query(
+      collection(db, 'specializedLeaderboards'),
+      where('type', '==', type),
+      orderBy(type === 'battle' ? 'winCount' : 'fiveMonadCount', 'desc'),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const data = [];
+    
+    querySnapshot.forEach((doc) => {
+      const docData = doc.data();
+      data.push(docData);
+    });
+    
+    return data;
+  } catch (error) {
+    console.error(`Error fetching ${type} leaderboard from Firebase:`, error);
+    return [];
   }
 }
 
@@ -91,21 +186,12 @@ export async function getHighScores(mode, limitCount = 10) {
 
   try {
     const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-    
-export async function getHighScores(mode, limitCount = 10) {
-  if (!db) {
-    // fallback code...
-  }
-  try {
-    const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-
     const q = query(
-      collection(db, 'specializedLeaderboards'), // NEW collection name
-      where('type', '==', mode),                 // Filter by 'type'
+      collection(db, 'specializedLeaderboards'),
+      where('type', '==', mode),
       orderBy('score', 'desc'),
       limit(limitCount)
     );
-
     const querySnapshot = await getDocs(q);
     const scores = [];
     querySnapshot.forEach((doc) => {
@@ -119,8 +205,7 @@ export async function getHighScores(mode, limitCount = 10) {
     });
     return scores;
   } catch (error) {
-    // error handling...
+    console.error('Error fetching scores from Firebase:', error);
+    return [];
   }
 }
-
-// ... (your other functions like saveSpecializedLeaderboard, getSpecializedLeaderboard remain unchanged)
