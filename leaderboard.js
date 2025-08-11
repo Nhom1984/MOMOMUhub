@@ -26,7 +26,7 @@ export async function saveScore(mode, score, name, walletAddress = null, extraDa
     try {
       const onlineScoresKey = `onlineScores_${mode}`;
       const existingScores = JSON.parse(localStorage.getItem(onlineScoresKey) || '[]');
-      
+
       const scoreData = {
         type: mode, // Use 'type' for consistency!
         score,
@@ -35,11 +35,11 @@ export async function saveScore(mode, score, name, walletAddress = null, extraDa
         timestamp: new Date().toISOString(),
         ...extraData
       };
-      
+
       existingScores.push(scoreData);
       existingScores.sort((a, b) => b.score - a.score);
       existingScores.splice(10); // Keep only top 10
-      
+
       localStorage.setItem(onlineScoresKey, JSON.stringify(existingScores));
       console.log('Score saved to local storage (fallback)');
       return true;
@@ -79,20 +79,20 @@ export async function saveSpecializedLeaderboard(type, playerData) {
     try {
       const key = `specialized_${type}_leaderboard`;
       const existingData = JSON.parse(localStorage.getItem(key) || '[]');
-      
+
       // Find existing player or create new entry
       const playerKey = playerData.address || playerData.name;
-      let existingPlayer = existingData.find(p => 
-        (p.address && p.address === playerData.address) || 
+      let existingPlayer = existingData.find(p =>
+        (p.address && p.address === playerData.address) ||
         (!p.address && p.name === playerData.name)
       );
-      
+
       if (existingPlayer) {
         Object.assign(existingPlayer, playerData);
       } else {
         existingData.push(playerData);
       }
-      
+
       localStorage.setItem(key, JSON.stringify(existingData));
       console.log(`Specialized ${type} leaderboard saved to local storage (fallback)`);
       return true;
@@ -104,7 +104,7 @@ export async function saveSpecializedLeaderboard(type, playerData) {
 
   try {
     const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
-    
+
     // Ensure fields for monluck and battle are always present
     if (type === 'monluck') {
       playerData.fiveMonadCount = playerData.fiveMonadCount ?? 0;
@@ -249,6 +249,7 @@ export async function getHighScores(mode, limitCount = 10) {
         timestamp: data.timestamp
       });
     });
+    console.log(`Fetched ${scores.length} scores for ${mode}:`, scores);
     return scores;
   } catch (error) {
     console.error(`Error fetching online scores for ${mode}:`, error);
