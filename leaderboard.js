@@ -92,16 +92,22 @@ export async function getHighScores(mode, limitCount = 10) {
   try {
     const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
     
+export async function getHighScores(mode, limitCount = 10) {
+  if (!db) {
+    // fallback code...
+  }
+  try {
+    const { collection, getDocs, query, where, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js');
+
     const q = query(
-      collection(db, 'specializedLeaderboards'),
-      where('type', '==', mode),
+      collection(db, 'specializedLeaderboards'), // NEW collection name
+      where('type', '==', mode),                 // Filter by 'type'
       orderBy('score', 'desc'),
       limit(limitCount)
     );
-    
+
     const querySnapshot = await getDocs(q);
     const scores = [];
-    
     querySnapshot.forEach((doc) => {
       const data = doc.data();
       scores.push({
@@ -111,12 +117,9 @@ export async function getHighScores(mode, limitCount = 10) {
         timestamp: data.timestamp
       });
     });
-    
-    // Already sorted by score descending, just return
     return scores;
   } catch (error) {
-    console.error('Error fetching scores from Firebase:', error);
-    return [];
+    // error handling...
   }
 }
 
