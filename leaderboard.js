@@ -37,7 +37,7 @@ export async function saveScore(mode, score, name, walletAddress = null, extraDa
       };
 
       existingScores.push(scoreData);
-      existingScores.sort((a, b) => b.score - a.score);
+      existingScores.sort((a, b) => (b.score ?? b.winCount ?? 0) - (a.score ?? a.winCount ?? 0));
       existingScores.splice(10); // Keep only top 10
 
       localStorage.setItem(onlineScoresKey, JSON.stringify(existingScores));
@@ -112,6 +112,11 @@ export async function saveSpecializedLeaderboard(type, playerData) {
     }
     if (type === 'battle') {
       playerData.winCount = playerData.winCount ?? 0;
+      // Ensure score is always present for frontend rendering
+      playerData.score = playerData.winCount;
+    } else if (playerData.score === undefined) {
+      // For other types, ensure score exists
+      playerData.score = 0;
     }
 
     const leaderboardData = {
@@ -140,8 +145,13 @@ export async function getSpecializedLeaderboard(type, limitCount = 10) {
     try {
       const key = `specialized_${type}_leaderboard`;
       const data = JSON.parse(localStorage.getItem(key) || '[]');
-      console.log(`Retrieved ${data.length} ${type} leaderboard entries from local storage (fallback)`);
-      return data.slice(0, limitCount);
+      // Normalize: ensure score exists for battle mode
+      const normalized = data.map(item => ({
+        ...item,
+        score: item.score ?? item.winCount ?? 0
+      }));
+      console.log(`Retrieved ${normalized.length} ${type} leaderboard entries from local storage (fallback)`);
+      return normalized.slice(0, limitCount);
     } catch (error) {
       console.error(`Error fetching ${type} leaderboard from local storage:`, error);
       return [];
@@ -179,7 +189,11 @@ export async function getSpecializedLeaderboard(type, limitCount = 10) {
     const data = [];
     querySnapshot.forEach((doc) => {
       const docData = doc.data();
-      data.push(docData);
+      // Always provide a "score" property for frontend
+      data.push({
+        ...docData,
+        score: docData.score ?? docData.winCount ?? 0
+      });
     });
     console.log(`Fetched ${data.length} entries for ${type}:`, data);
     return data;
@@ -201,8 +215,13 @@ export async function getHighScores(mode, limitCount = 10) {
     try {
       const onlineScoresKey = `onlineScores_${mode}`;
       const scores = JSON.parse(localStorage.getItem(onlineScoresKey) || '[]');
-      console.log(`Retrieved ${scores.length} scores from local storage (fallback)`);
-      return scores.slice(0, limitCount);
+      // Normalize: ensure score exists for battle mode
+      const normalized = scores.map(item => ({
+        ...item,
+        score: item.score ?? item.winCount ?? 0
+      }));
+      console.log(`Retrieved ${normalized.length} scores from local storage (fallback)`);
+      return normalized.slice(0, limitCount);
     } catch (error) {
       console.error('Error fetching scores from local storage:', error);
       return [];
@@ -239,8 +258,9 @@ export async function getHighScores(mode, limitCount = 10) {
     const scores = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
+      // Always provide a "score" property for frontend
       scores.push({
-        score: data.score,
+        score: data.score ?? data.winCount ?? 0,
         winCount: data.winCount,
         fiveMonadCount: data.fiveMonadCount,
         fourMonadCount: data.fourMonadCount,
