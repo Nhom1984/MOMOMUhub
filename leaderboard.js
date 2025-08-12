@@ -276,3 +276,76 @@ export async function getHighScores(mode, limitCount = 10) {
     return [];
   }
 }
+
+// ----------------- LEADERBOARD RENDERING SECTION -------------------
+
+/**
+ * Render the Battle leaderboard as a clean column-aligned table
+ * Call this after DOMContentLoaded or when leaderboard panel is shown.
+ */
+export async function renderBattleLeaderboard() {
+  // Get data (use getSpecializedLeaderboard)
+  const data = await getSpecializedLeaderboard('battle', 10);
+
+  // Container
+  let table = document.createElement('div');
+  table.id = "leaderboardTable";
+  table.className = "leaderboard-grid";
+
+  // Header row
+  table.innerHTML = `
+    <div class="lb-header-cell"></div>
+    <div class="lb-header-cell">Rank</div>
+    <div class="lb-header-cell">Name</div>
+    <div class="lb-header-cell">Wins</div>
+    <div class="lb-header-cell">Wallet</div>
+  `;
+
+  // Score rows
+  data.forEach((item, i) => {
+    const trophy = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "";
+    const displayName = item.name && item.name !== "Anonymous" ? item.name : (item.walletAddress ? "Anonymous" : "Anonymous");
+    const walletShort = item.walletAddress
+      ? item.walletAddress.slice(0, 6) + '...' + item.walletAddress.slice(-4)
+      : '';
+    const wins = item.winCount ?? item.score ?? 0;
+
+    table.innerHTML += `
+      <div class="lb-cell trophy">${trophy}</div>
+      <div class="lb-cell rank">${i + 1}.</div>
+      <div class="lb-cell">${displayName}</div>
+      <div class="lb-cell">${wins}</div>
+      <div class="lb-cell wallet">${walletShort}</div>
+    `;
+  });
+
+  // Replace leaderboardTable DOM
+  const oldTable = document.getElementById('leaderboardTable');
+  if (oldTable) {
+    oldTable.replaceWith(table);
+  } else {
+    // If first load, append to container
+    const wrap = document.querySelector('.leaderboard-table-wrap');
+    if (wrap) wrap.appendChild(table);
+  }
+}
+
+// Bind tab switching and initial rendering (extendable for other modes)
+window.addEventListener('DOMContentLoaded', () => {
+  // Only render if leaderboard screen exists
+  const lbScreen = document.getElementById('leaderboardScreen');
+  if (lbScreen) {
+    renderBattleLeaderboard();
+
+    // Tab click (for demo, just rerender battle)
+    document.querySelectorAll('.lb-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // TODO: support other modes: call render for other leaderboards
+        // For now, just rerender battle mode
+        renderBattleLeaderboard();
+      });
+    });
+  }
+});
