@@ -1008,9 +1008,15 @@ function drawNameInput() {
  */
 function getLeaderboardData(mode) {
   if (mode === 'monluck') {
-    return monluckLeaderboard.slice(0, 10); // Top 10 monluck players
+    // For monluck, prefer online scores if available, fallback to local
+    const online = onlineScores[mode] || [];
+    const local = monluckLeaderboard.slice(0, 10);
+    return online.length > 0 ? online : local;
   } else if (mode === 'battle') {
-    return battleLeaderboard.slice(0, 10); // Top 10 battle players
+    // For battle, prefer online scores if available, fallback to local
+    const online = onlineScores[mode] || [];
+    const local = battleLeaderboard.slice(0, 10);
+    return online.length > 0 ? online : local;
   } else {
     return getCombinedScores(mode); // Traditional score-based leaderboards
   }
@@ -1092,7 +1098,8 @@ function drawMonluckLeaderboard(data) {
     const y = 250 + i * 30;
     const rank = i + 1;
     const name = player.name || "Anonymous";
-    const walletText = player.address ? getShortAddress(player.address) : "";
+    // Handle both online data (walletAddress) and local data (address) formats
+    const walletText = (player.walletAddress || player.address) ? getShortAddress(player.walletAddress || player.address) : "";
 
     // Highlight top 3
     if (rank <= 3) {
@@ -1104,7 +1111,7 @@ function drawMonluckLeaderboard(data) {
       ctx.fillText("🏆", WIDTH / 2 - 280, y);
     }
 
-    ctx.fillText(`${rank}.    ${name}    ${player.fiveMonadCount}    ${player.fourMonadCount}    ${player.bestStreak}    ${walletText}`, WIDTH / 2, y);
+    ctx.fillText(`${rank}.    ${name}    ${player.fiveMonadCount || 0}    ${player.fourMonadCount || 0}    ${player.bestStreak || 0}    ${walletText}`, WIDTH / 2, y);
   }
 }
 
@@ -1121,7 +1128,10 @@ function drawBattleLeaderboard(data) {
     const y = 250 + i * 30;
     const rank = i + 1;
     const name = player.name || "Anonymous";
-    const walletText = player.address ? getShortAddress(player.address) : "";
+    // Handle both online data (walletAddress) and local data (address) formats
+    const walletText = (player.walletAddress || player.address) ? getShortAddress(player.walletAddress || player.address) : "";
+    // Handle both online data (score or winCount) and local data (winCount) formats
+    const wins = player.winCount ?? player.score ?? 0;
 
     // Highlight top 3
     if (rank <= 3) {
@@ -1133,7 +1143,7 @@ function drawBattleLeaderboard(data) {
       ctx.fillText("🏆", WIDTH / 2 - 200, y);
     }
 
-    ctx.fillText(`${rank}.    ${name}    ${player.winCount}    ${walletText}`, WIDTH / 2, y);
+    ctx.fillText(`${rank}.    ${name}    ${wins}    ${walletText}`, WIDTH / 2, y);
   }
 }
 
