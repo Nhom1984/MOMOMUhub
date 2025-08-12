@@ -15,10 +15,35 @@
       </button>
       <canvas id="gameCanvas" width="800" height="700"></canvas>
     </div>
+    <div id="leaderboardScreen" style="display: none;">
+      <div class="leaderboard-title">LEADERBOARD</div>
+      <div class="leaderboard-tabs">
+        <button class="lb-tab" data-mode="music">MUSIC</button>
+        <button class="lb-tab" data-mode="classic">CLASSIC</button>
+        <button class="lb-tab" data-mode="memomu">MEMOMU</button>
+        <button class="lb-tab" data-mode="monluck">MONLUCK</button>
+        <button class="lb-tab active" data-mode="battle">BATTLE</button>
+      </div>
+      <div class="leaderboard-table-wrap">
+        <div id="leaderboardTable"></div>
+      </div>
+      <button class="lb-back-btn" onclick="hideLeaderboard()">BACK</button>
+    </div>
   </div>
   <script type="module" src="firebase.js"></script>
   <script type="module" src="leaderboard.js"></script>
   <script type="module" src="memomu.js"></script>
+  <script>
+    // Example toggling for demo:
+    function showLeaderboard() {
+      document.getElementById('leaderboardScreen').style.display = 'block';
+      document.getElementById('gameContainer').style.display = 'none';
+    }
+    function hideLeaderboard() {
+      document.getElementById('leaderboardScreen').style.display = 'none';
+      document.getElementById('gameContainer').style.display = 'block';
+    }
+    // Optionally: call showLeaderboard() to test
+  </script>
 </body>
-
 </html>
