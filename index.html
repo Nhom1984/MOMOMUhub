@@ -16,6 +16,22 @@
       <canvas id="gameCanvas" width="800" height="700"></canvas>
     </div>
   </div>
+  
+  <!-- Wallet Selection Modal -->
+  <div id="walletModal" class="wallet-modal" style="display: none;">
+    <div class="wallet-modal-content">
+      <h2>Choose Your Wallet</h2>
+      <button class="wallet-option" onclick="connectMetaMask()">
+        🦊 MetaMask
+      </button>
+      <button class="wallet-option" onclick="connectWalletConnect()">
+        🔗 WalletConnect
+      </button>
+      <button class="wallet-option wallet-close" onclick="closeWalletModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
   <script type="module" src="firebase.js"></script>
   <script type="module" src="leaderboard.js"></script>
   <script type="module" src="memomu.js"></script>

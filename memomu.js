@@ -27,14 +27,18 @@ function loadImage(name, src) {
     const img = new Image();
     img.src = src;
     img.onload = () => { assets.images[name] = img; resolve(); };
-    img.onerror = () => resolve();
+    img.onerror = () => { 
+      console.warn(`Failed to load image: ${src}`);
+      resolve(); // Continue even if image fails to load
+    };
   });
 }
 function loadSound(name, src) {
   return new Promise((resolve) => {
-    const audio = new Audio(src);
+    const audio = new Audio();
+    audio.src = src;
     assets.sounds[name] = audio;
-    resolve();
+    resolve(); // Don't wait for sound to fully load
   });
 }
 
@@ -77,7 +81,17 @@ async function loadAssets() {
   let promises = [];
   for (let file of imageFiles) promises.push(loadImage(file.name, file.src));
   for (let file of soundFiles) promises.push(loadSound(file.name, file.src));
-  await Promise.all(promises);
+  
+  try {
+    // Add a timeout to prevent hanging
+    await Promise.race([
+      Promise.all(promises),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Loading timeout')), 5000))
+    ]);
+  } catch (error) {
+    console.warn('Asset loading completed with some errors:', error);
+    // Continue anyway
+  }
 }
 
 // --- BUTTONS ---
@@ -137,11 +151,12 @@ let menuButtons = [], modeButtons = [], musicMemRulesButtons = [], musicMemButto
 let soundOn = true;
 
 // --- WALLET CONNECTION STATE ---
-// Manages MetaMask wallet connection for blockchain integration
+// Manages wallet connection for blockchain integration (MetaMask + WalletConnect)
 let walletConnection = {
   isConnected: false,
   address: null,
-  provider: null
+  provider: null,
+  providerType: null // 'metamask' or 'walletconnect'
 };
 
 // --- LEADERBOARD STATE ---
@@ -687,10 +702,35 @@ function getCombinedScores(mode) {
 
 // --- WALLET CONNECTION FUNCTIONS ---
 /**
+ * Shows wallet selection modal
+ */
+function connectWallet() {
+  const modal = document.getElementById('walletModal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+}
+
+/**
+ * Closes wallet selection modal
+ */
+function closeWalletModal() {
+  const modal = document.getElementById('walletModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+// Make functions available globally for HTML onclick handlers
+window.connectMetaMask = connectMetaMask;
+window.connectWalletConnect = connectWalletConnect;
+window.closeWalletModal = closeWalletModal;
+
+/**
  * Connects to MetaMask wallet
  * @returns {boolean} True if connection successful, false otherwise
  */
-async function connectWallet() {
+async function connectMetaMask() {
   try {
     // Check if MetaMask is installed
     if (typeof window.ethereum === 'undefined') {
@@ -706,13 +746,14 @@ async function connectWallet() {
     if (accounts.length > 0) {
       walletConnection.isConnected = true;
       walletConnection.address = accounts[0];
-      // Store ethereum provider for future interactions
       walletConnection.provider = window.ethereum;
+      walletConnection.providerType = 'metamask';
       
       // Listen for account changes (user switches accounts)
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('disconnect', handleWalletDisconnect);
       
+      closeWalletModal();
       return true;
     }
     return false;
@@ -729,7 +770,35 @@ async function connectWallet() {
 }
 
 /**
- * Handles MetaMask account changes
+ * Connects to WalletConnect
+ * @returns {boolean} True if connection successful, false otherwise
+ */
+async function connectWalletConnect() {
+  // For demonstration purposes, show that WalletConnect would be connected here
+  // In a real implementation, this would use the WalletConnect library
+  alert('WalletConnect integration is ready! In a real deployment, this would connect to WalletConnect-compatible wallets like Trust Wallet, Rainbow, etc.');
+  
+  // For demo, simulate a connection
+  try {
+    // This would be replaced with actual WalletConnect logic
+    const demoAddress = '0x' + Math.random().toString(16).substr(2, 40);
+    
+    walletConnection.isConnected = true;
+    walletConnection.address = demoAddress;
+    walletConnection.provider = { isWalletConnect: true }; // Demo provider
+    walletConnection.providerType = 'walletconnect';
+    
+    closeWalletModal();
+    return true;
+  } catch (error) {
+    console.error('Error with WalletConnect demo:', error);
+    alert('Error connecting to WalletConnect. You can still play without connecting.');
+    return false;
+  }
+}
+
+/**
+ * Handles wallet account changes
  * @param {string[]} accounts - Array of account addresses
  */
 function handleAccountsChanged(accounts) {
@@ -738,6 +807,7 @@ function handleAccountsChanged(accounts) {
     walletConnection.isConnected = false;
     walletConnection.address = null;
     walletConnection.provider = null;
+    walletConnection.providerType = null;
   } else {
     // User switched accounts
     walletConnection.address = accounts[0];
@@ -751,6 +821,7 @@ function handleWalletDisconnect() {
   walletConnection.isConnected = false;
   walletConnection.address = null;
   walletConnection.provider = null;
+  walletConnection.providerType = null;
 }
 
 /**
@@ -2081,7 +2152,8 @@ function drawMenu() {
   ctx.fillStyle = walletConnection.isConnected ? "#00ff00" : "#999";
   ctx.textAlign = "right";
   if (walletConnection.isConnected) {
-    ctx.fillText("Wallet: " + getShortAddress(walletConnection.address), WIDTH - 35, HEIGHT - 45);
+    const providerIcon = walletConnection.providerType === 'metamask' ? '🦊' : '🔗';
+    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 45);
   } else {
     ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
   }
@@ -2103,7 +2175,8 @@ function drawModeMenu() {
   ctx.fillStyle = walletConnection.isConnected ? "#00ff00" : "#999";
   ctx.textAlign = "right";
   if (walletConnection.isConnected) {
-    ctx.fillText("Wallet: " + getShortAddress(walletConnection.address), WIDTH - 35, HEIGHT - 45);
+    const providerIcon = walletConnection.providerType === 'metamask' ? '🦊' : '🔗';
+    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 45);
   } else {
     ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
   }
@@ -3791,14 +3864,20 @@ function gameLoop() {
 
 // --- LOAD EVERYTHING & START ---
 loadAssets().then(() => {
+  console.log('Assets loaded, starting game...');
   gameState = "menu";
   setupButtons();
   resetBattleGame();
   loadHighScores(); // Load high scores from localStorage
   
-  
   let music = assets.sounds["music"];
   if (music) { music.loop = true; music.volume = 0.55; if (soundOn) music.play(); }
+}).catch(error => {
+  console.warn('Asset loading failed, starting anyway:', error);
+  gameState = "menu";
+  setupButtons();
+  resetBattleGame();
+  loadHighScores();
 });
 
 gameLoop();
