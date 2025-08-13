@@ -2879,33 +2879,39 @@ function drawBattleGame() {
     ctx.fillStyle = "#222";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    // Avatars are 300% bigger (130px -> 390px) 
-    let img_sz = 390;
-    let avatar_y = 30; //
+    // Avatars are centered and larger for better visibility
+    let img_sz = 420; // Increased from 390px for better prominence  
+    let avatar_y = 20; // Moved slightly higher for better spacing
+    
+    // Center avatars horizontally with proper spacing
+    let leftAvatarX = WIDTH / 4 - img_sz / 2; // Quarter position for left avatar
+    let rightAvatarX = 3 * WIDTH / 4 - img_sz / 2; // Three-quarter position for right avatar
+    
     let pimg = assets.images[`avatar${battleGame.player + 1}`];
     let oimg = assets.images[`avatar${battleGame.opponent + 1}`];
-    if (pimg) ctx.drawImage(pimg, -20, avatar_y, img_sz, img_sz);
-    if (oimg) ctx.drawImage(oimg, WIDTH - -20 - img_sz, avatar_y, img_sz, img_sz);
+    if (pimg) ctx.drawImage(pimg, leftAvatarX, avatar_y, img_sz, img_sz);
+    if (oimg) ctx.drawImage(oimg, rightAvatarX, avatar_y, img_sz, img_sz);
 
-    // Draw avatar names under their images - same size and position under avatars
-    ctx.font = "28px Arial";
+    // Draw avatar names directly under their images with better positioning
+    ctx.font = "32px Arial"; // Increased font size for better visibility
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
     if (battleGame.player !== null) {
-      ctx.fillText(battleNames[battleGame.player], -40 + img_sz / 2, avatar_y + img_sz + 30);
+      ctx.fillText(battleNames[battleGame.player], leftAvatarX + img_sz / 2, avatar_y + img_sz + 40);
     }
     if (battleGame.opponent !== null) {
-      ctx.fillText(battleNames[battleGame.opponent], WIDTH - 0 - img_sz + img_sz / 2, avatar_y + img_sz + 30);
+      ctx.fillText(battleNames[battleGame.opponent], rightAvatarX + img_sz / 2, avatar_y + img_sz + 40);
     }
 
-    // 'vs' text moved 2cm lower (~76px)
-    ctx.font = "52px Arial";
+    // 'VS' text centered between avatars with better spacing
+    ctx.font = "56px Arial"; // Slightly larger for better prominence
     ctx.fillStyle = "#ff69b4";
-    ctx.fillText("VS", WIDTH / 2, 120 + 76);
+    ctx.textAlign = "center";
+    ctx.fillText("VS", WIDTH / 2, avatar_y + img_sz / 2 + 20); // Centered vertically with avatars
 
-    // Score numbers moved 2cm lower (~76px) 
-    ctx.font = "52px Arial";
-    ctx.fillText(`${battleGame.pscore} : ${battleGame.oscore}`, WIDTH / 2, 200 + 76);
+    // Score numbers positioned below VS text with good spacing
+    ctx.font = "48px Arial";
+    ctx.fillText(`${battleGame.pscore} : ${battleGame.oscore}`, WIDTH / 2, avatar_y + img_sz / 2 + 80);
 
     let msg = battleGame.pscore > battleGame.oscore ? "YOU WIN!" : battleGame.pscore < battleGame.oscore ? "YOU LOSE!" : "DRAW!";
     let color = battleGame.pscore > battleGame.oscore ? "#00ff00" : battleGame.pscore < battleGame.oscore ? "#ff0000" : "#ffb6c1";
@@ -3823,9 +3829,16 @@ loadAssets().then(() => {
   resetBattleGame();
   loadHighScores(); // Load high scores from localStorage
   
+  // Ensure all game states are properly initialized
+  initializeClassicMemoryUpgraded();
+  startMusicMemoryGame(false); // Initialize without starting
+  startMemoryGameMemomu(false); // Initialize without starting
   
   let music = assets.sounds["music"];
   if (music) { music.loop = true; music.volume = 0.55; if (soundOn) music.play(); }
+}).catch(error => {
+  console.error("Asset loading failed:", error);
+  gameState = "menu"; // Fallback to menu even if some assets fail
 });
 
 gameLoop();
