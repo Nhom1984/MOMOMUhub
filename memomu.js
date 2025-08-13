@@ -7,58 +7,19 @@
 // Import online leaderboard functions
 import { saveScore, getHighScores } from './leaderboard.js';
 
-// Set canvas size to be responsive and fill available space
+// Set canvas size to fixed 800x700
 window.addEventListener('DOMContentLoaded', function () {
   const canvas = document.getElementById('gameCanvas');
-  
-  function resizeCanvas() {
-    // Make canvas fill most of the viewport while maintaining aspect ratio
-    const maxWidth = Math.min(window.innerWidth * 0.95, 1200);
-    const maxHeight = Math.min(window.innerHeight * 0.95, 900);
-    
-    // Maintain 800:700 aspect ratio (8:7)
-    const aspectRatio = 8 / 7;
-    let canvasWidth, canvasHeight;
-    
-    if (maxWidth / maxHeight > aspectRatio) {
-      canvasHeight = maxHeight;
-      canvasWidth = canvasHeight * aspectRatio;
-    } else {
-      canvasWidth = maxWidth;
-      canvasHeight = canvasWidth / aspectRatio;
-    }
-    
-    // Ensure minimum size for playability
-    canvasWidth = Math.max(canvasWidth, 800);
-    canvasHeight = Math.max(canvasHeight, 700);
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    canvas.style.width = canvasWidth + 'px';
-    canvas.style.height = canvasHeight + 'px';
-    
-    // Update global WIDTH and HEIGHT variables
-    window.WIDTH = canvasWidth;
-    window.HEIGHT = canvasHeight;
-  }
-  
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
-  
+  canvas.width = 800;
+  canvas.height = 700;
   if (typeof draw === "function") draw();
 });
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-let WIDTH = canvas.width;
-let HEIGHT = canvas.height;
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
 
 let assets = { images: {}, sounds: {} };
-
-// Helper function to clear canvas with matching background color
-function clearCanvas() {
-  ctx.fillStyle = "#181818";
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-}
 
 // --- ASSET LOADING ---
 function loadImage(name, src) {
@@ -1063,7 +1024,7 @@ function getLeaderboardData(mode) {
 
 // --- LEADERBOARD DRAWING ---
 function drawLeaderboard() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Background
   ctx.fillStyle = "#ffb6c1";
@@ -1791,10 +1752,10 @@ function nextClassicRound() {
 }
 
 function calculateRoundScore(timeUsed) {
-  let baseScore = memoryGame.pairsFound * 10; // 10 points per pair found
-  let timeBonus = Math.max(0, Math.floor((30 - timeUsed) * 2)); // 2 points per second under 30
-  let roundBonus = Math.min(memoryGame.currentRound * 5, 25); // 5 points per round, max 25
-  return baseScore + timeBonus + roundBonus;
+  let baseScore = memoryGame.pairsFound; // 1 point per pair
+  let timeBonus = Math.max(0, 30 - timeUsed); // seconds under 30
+  let multiplier = memoryGame.currentRound; // round number as multiplier
+  return baseScore + (timeBonus * multiplier);
 }
 
 function endClassicRound() {
@@ -2107,7 +2068,7 @@ function nextBattleRoundOrEnd() {
 
 // --- DRAW FUNCTIONS ---
 function drawMenu() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   let img = assets.images["memomu"];
   if (img) ctx.drawImage(img, WIDTH / 2 - 275, 50, 550, 275);
   ctx.fillStyle = "#ff69b4";
@@ -2129,7 +2090,7 @@ function drawMenu() {
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
 }
 function drawModeMenu() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   let img = assets.images["memomu"];
   if (img) ctx.drawImage(img, WIDTH / 2 - 275, 50, 550, 275);
   ctx.fillStyle = "#ff69b4";
@@ -2151,7 +2112,7 @@ function drawModeMenu() {
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
 }
 function drawMemoryMenu() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   ctx.fillStyle = "#836EF9";
   ctx.font = "44px Arial";
   ctx.textAlign = "center";
@@ -2163,7 +2124,7 @@ function drawMemoryMenu() {
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
 }
 function drawMusicMemoryRules() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Background
   ctx.fillStyle = "#000";
@@ -2232,7 +2193,7 @@ function drawMusicMemoryRules() {
 }
 
 function drawMusicMemory() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   ctx.fillStyle = "#ff69b4";
   ctx.font = "40px Arial";
   ctx.textAlign = "center";
@@ -2359,7 +2320,7 @@ function drawMusicMemory() {
 
 // --- UPGRADED CLASSIC MEMORY DRAWING FUNCTIONS ---
 function drawMemoryClassicRules() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Light pink background
   ctx.fillStyle = "#ffb6c1";
@@ -2383,13 +2344,13 @@ function drawMemoryClassicRules() {
   ctx.font = "24px Arial";
   ctx.fillText("Scoring:", WIDTH / 2, 400);
   ctx.font = "20px Arial";
-  ctx.fillText("10 points per pair + time bonus + round bonus", WIDTH / 2, 430);
+  ctx.fillText("1 point per pair + (seconds under 30) × round number", WIDTH / 2, 430);
   ctx.fillText("Each round: 30 seconds maximum", WIDTH / 2, 460);
 
   // Show different buttons based on state
   if (memoryGame.showClassicStartButton) {
     // Show START button
-    let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60); // Moved 60px higher
+    let startButton = new Button("START", WIDTH / 2, HEIGHT - 100, 200, 60);
     startButton.draw();
   } else {
     // Show GOT IT button
@@ -2405,7 +2366,7 @@ function drawMemoryClassicRules() {
 
 // --- MEMOMU MEMORY RULES DRAWING FUNCTION ---
 function drawMemomuMemoryRules() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Light pink background
   ctx.fillStyle = "#ffb6c1";
@@ -2456,7 +2417,7 @@ function drawMemomuMemoryRules() {
 }
 
 function drawMemoryGameClassic() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Update timer only if game has started
   if (!memoryGame.lock && memoryGame.gameStarted) {
@@ -2545,7 +2506,7 @@ function drawMemoryGameClassic() {
 
   // Show START button if game hasn't started yet
   if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
-    let startButton = new Button("START", WIDTH / 2, HEIGHT - 140, 200, 60); // Moved 60px higher
+    let startButton = new Button("START", WIDTH / 2, HEIGHT - 80, 200, 60);
     startButton.draw();
   }
 
@@ -2562,7 +2523,7 @@ function drawMemoryGameClassic() {
 }
 // Draw score table for Memomu game
 function drawMemoryGameMemomu() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   // Title
   ctx.fillStyle = "#836EF9";
@@ -2692,7 +2653,7 @@ function drawMemoryGameMemomu() {
   // NOTE: Removed drawGameOverOverlay() call for MEMOMU mode - using custom score table instead
 }
 function drawMonluckGame() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   ctx.fillStyle = "#836EF9";
   ctx.font = "40px Arial";
   ctx.textAlign = "center";
@@ -2809,7 +2770,7 @@ function drawMonluckGame() {
   drawGameOverOverlay();
 }
 function drawBattleGame() {
-  clearCanvas();
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   if (battleGame.state === "rules") {
     ctx.fillStyle = "#222";
     ctx.fillRect(WIDTH / 2 - 340, HEIGHT / 2 - 220, 680, 380);
@@ -2879,39 +2840,33 @@ function drawBattleGame() {
     ctx.fillStyle = "#222";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    // Avatars are centered and larger for better visibility
-    let img_sz = 420; // Increased from 390px for better prominence  
-    let avatar_y = 20; // Moved slightly higher for better spacing
-    
-    // Center avatars horizontally with proper spacing
-    let leftAvatarX = WIDTH / 4 - img_sz / 2; // Quarter position for left avatar
-    let rightAvatarX = 3 * WIDTH / 4 - img_sz / 2; // Three-quarter position for right avatar
-    
+    // Avatars are 300% bigger (130px -> 390px) 
+    let img_sz = 390;
+    let avatar_y = 30; //
     let pimg = assets.images[`avatar${battleGame.player + 1}`];
     let oimg = assets.images[`avatar${battleGame.opponent + 1}`];
-    if (pimg) ctx.drawImage(pimg, leftAvatarX, avatar_y, img_sz, img_sz);
-    if (oimg) ctx.drawImage(oimg, rightAvatarX, avatar_y, img_sz, img_sz);
+    if (pimg) ctx.drawImage(pimg, -20, avatar_y, img_sz, img_sz);
+    if (oimg) ctx.drawImage(oimg, WIDTH - -20 - img_sz, avatar_y, img_sz, img_sz);
 
-    // Draw avatar names directly under their images with better positioning
-    ctx.font = "32px Arial"; // Increased font size for better visibility
+    // Draw avatar names under their images - same size and position under avatars
+    ctx.font = "28px Arial";
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
     if (battleGame.player !== null) {
-      ctx.fillText(battleNames[battleGame.player], leftAvatarX + img_sz / 2, avatar_y + img_sz + 40);
+      ctx.fillText(battleNames[battleGame.player], -40 + img_sz / 2, avatar_y + img_sz + 30);
     }
     if (battleGame.opponent !== null) {
-      ctx.fillText(battleNames[battleGame.opponent], rightAvatarX + img_sz / 2, avatar_y + img_sz + 40);
+      ctx.fillText(battleNames[battleGame.opponent], WIDTH - 0 - img_sz + img_sz / 2, avatar_y + img_sz + 30);
     }
 
-    // 'VS' text centered between avatars with better spacing
-    ctx.font = "56px Arial"; // Slightly larger for better prominence
+    // 'vs' text moved 2cm lower (~76px)
+    ctx.font = "52px Arial";
     ctx.fillStyle = "#ff69b4";
-    ctx.textAlign = "center";
-    ctx.fillText("VS", WIDTH / 2, avatar_y + img_sz / 2 + 20); // Centered vertically with avatars
+    ctx.fillText("VS", WIDTH / 2, 120 + 76);
 
-    // Score numbers positioned below VS text with good spacing
-    ctx.font = "48px Arial";
-    ctx.fillText(`${battleGame.pscore} : ${battleGame.oscore}`, WIDTH / 2, avatar_y + img_sz / 2 + 80);
+    // Score numbers moved 2cm lower (~76px) 
+    ctx.font = "52px Arial";
+    ctx.fillText(`${battleGame.pscore} : ${battleGame.oscore}`, WIDTH / 2, 200 + 76);
 
     let msg = battleGame.pscore > battleGame.oscore ? "YOU WIN!" : battleGame.pscore < battleGame.oscore ? "YOU LOSE!" : "DRAW!";
     let color = battleGame.pscore > battleGame.oscore ? "#00ff00" : battleGame.pscore < battleGame.oscore ? "#ff0000" : "#ffb6c1";
@@ -3177,7 +3132,7 @@ canvas.addEventListener("click", function (e) {
       memoryGame.showClassicStartButton = true;
     } else if (memoryGame.showClassicStartButton) {
       // Check if START button was clicked (should not reach here as we transition to memory_classic)
-      let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60); // Moved 60px higher
+      let startButton = new Button("START", WIDTH / 2, HEIGHT - 100, 200, 60);
       if (startButton.isInside(mx, my)) {
         startClassicRound();
       }
@@ -3199,7 +3154,7 @@ canvas.addEventListener("click", function (e) {
 
     // Handle START button click if game hasn't started yet
     if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
-      let startButton = new Button("START", WIDTH / 2, HEIGHT - 140, 200, 60); // Moved 60px higher
+      let startButton = new Button("START", WIDTH / 2, HEIGHT - 80, 200, 60);
       if (startButton.isInside(mx, my)) {
         memoryGame.gameStarted = true;
         memoryGame.showClassicStartButton = false;
@@ -3787,7 +3742,7 @@ function drawMemoryMemomuPostScore() {
 // --- MAIN DRAW LOOP ---
 function draw() {
   if (gameState === "loading") {
-    clearCanvas();
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
     ctx.font = "45px Arial";
     ctx.fillStyle = "#ffb6c1";
     ctx.textAlign = "center";
@@ -3814,6 +3769,18 @@ function draw() {
   updateUserFeedback();
   drawUserFeedback();
 }
+function goFullScreen() {
+  var elem = document.getElementById('gameCanvas'); // Replace with your canvas or main game container id
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen();
+  } else if (elem.mozRequestFullScreen) { // Firefox
+    elem.mozRequestFullScreen();
+  } else if (elem.webkitRequestFullscreen) { // Chrome, Safari and Opera
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) { // IE/Edge
+    elem.msRequestFullscreen();
+  }
+}
 
 // --- GAME LOOP ---
 function gameLoop() {
@@ -3829,16 +3796,9 @@ loadAssets().then(() => {
   resetBattleGame();
   loadHighScores(); // Load high scores from localStorage
   
-  // Ensure all game states are properly initialized
-  initializeClassicMemoryUpgraded();
-  startMusicMemoryGame(false); // Initialize without starting
-  startMemoryGameMemomu(false); // Initialize without starting
   
   let music = assets.sounds["music"];
   if (music) { music.loop = true; music.volume = 0.55; if (soundOn) music.play(); }
-}).catch(error => {
-  console.error("Asset loading failed:", error);
-  gameState = "menu"; // Fallback to menu even if some assets fail
 });
 
 gameLoop();
