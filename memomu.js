@@ -177,7 +177,8 @@ let nameInput = {
   mode: "",
   score: 0,
   currentName: "",
-  maxLength: 12
+  maxLength: 12,
+  buttons: [] // For mobile Enter/Cancel buttons
 };
 
 // --- GAME OVER OVERLAY ---
@@ -725,6 +726,34 @@ function closeWalletModal() {
 window.connectMetaMask = connectMetaMask;
 window.connectWalletConnect = connectWalletConnect;
 window.closeWalletModal = closeWalletModal;
+window.disconnectWallet = disconnectWallet;
+
+/**
+ * Disconnects the current wallet
+ */
+function disconnectWallet() {
+  if (walletConnection.isConnected) {
+    // Remove event listeners if they exist
+    if (walletConnection.provider && walletConnection.providerType === 'metamask') {
+      try {
+        walletConnection.provider.removeListener('accountsChanged', handleAccountsChanged);
+        walletConnection.provider.removeListener('disconnect', handleWalletDisconnect);
+      } catch (error) {
+        console.warn('Error removing MetaMask listeners:', error);
+      }
+    }
+    
+    // Clear wallet connection state
+    handleWalletDisconnect();
+    
+    // Close modal and show confirmation
+    closeWalletModal();
+    alert('Wallet disconnected successfully!');
+  } else {
+    closeWalletModal();
+    alert('No wallet is currently connected.');
+  }
+}
 
 /**
  * Connects to MetaMask wallet
@@ -907,6 +936,32 @@ function showNameInput(mode, score) {
   nameInput.mode = mode;
   nameInput.score = score;
   nameInput.currentName = "";
+  
+  // Create Enter and Cancel buttons for mobile
+  nameInput.buttons = [
+    new Button("ENTER", WIDTH / 2 - 80, HEIGHT / 2 + 100, 140, 40),
+    new Button("CANCEL", WIDTH / 2 + 80, HEIGHT / 2 + 100, 140, 40)
+  ];
+  
+  // Try to trigger mobile keyboard by creating a temporary input field
+  setTimeout(() => {
+    // Create a temporary input element to trigger mobile keyboard
+    const tempInput = document.createElement('input');
+    tempInput.type = 'text';
+    tempInput.style.position = 'absolute';
+    tempInput.style.left = '-9999px';
+    tempInput.style.opacity = '0';
+    tempInput.style.pointerEvents = 'none';
+    document.body.appendChild(tempInput);
+    
+    // Focus it to trigger keyboard
+    tempInput.focus();
+    
+    // Remove it after a short delay
+    setTimeout(() => {
+      document.body.removeChild(tempInput);
+    }, 100);
+  }, 100);
 }
 
 function hideNameInput() {
@@ -914,6 +969,7 @@ function hideNameInput() {
   nameInput.mode = "";
   nameInput.score = 0;
   nameInput.currentName = "";
+  nameInput.buttons = [];
 }
 
 function submitNameInput() {
@@ -1069,7 +1125,10 @@ function drawNameInput() {
   // Instructions
   ctx.font = "16px Arial";
   ctx.fillStyle = "#444";
-  ctx.fillText("Press ENTER to submit or ESC to skip", WIDTH / 2, HEIGHT / 2 + 80);
+  ctx.fillText("Press ENTER to submit or ESC to skip", WIDTH / 2, HEIGHT / 2 + 70);
+
+  // Draw mobile buttons
+  nameInput.buttons.forEach(button => button.draw());
 }
 
 /**
@@ -1660,7 +1719,7 @@ function handleMusicMemTileClick(tileIdx) {
   if (tile.isDecoy) {
     // Wrong click - end round immediately
     let sfx = assets.sounds["buuuu"];
-    if (soundOn && sfx) {
+    if (sfx) {
       try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
     }
 
@@ -1685,7 +1744,7 @@ function handleMusicMemTileClick(tileIdx) {
   if (tile.imageIdx !== expectedImg) {
     // Wrong order - end round immediately
     let sfx = assets.sounds["buuuu"];
-    if (soundOn && sfx) {
+    if (sfx) {
       try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
     }
 
@@ -1713,7 +1772,7 @@ function handleMusicMemTileClick(tileIdx) {
     musicMem.score += bonusPoints;
 
     let sfx = assets.sounds["yupi"];
-    if (soundOn && sfx) {
+    if (sfx) {
       try { sfx.currentTime = 0; sfx.play(); } catch (e) { }
     }
 
@@ -2579,7 +2638,7 @@ function drawMemoryGameClassic() {
 
   // Show START button if game hasn't started yet
   if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
-    let startButton = new Button("START", WIDTH / 2, HEIGHT - 80, 200, 60);
+    let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60);
     startButton.draw();
   }
 
@@ -3046,7 +3105,7 @@ function drawBattleGrids() {
 canvas.addEventListener("click", function (e) {
   let rect = canvas.getBoundingClientRect();
   
-  // Improved coordinate calculation for fullscreen compatibility
+  // Improved coordinate calculation for responsive display
   // Calculate the actual scaling ratio between canvas and its display size
   let scaleX = canvas.width / rect.width;
   let scaleY = canvas.height / rect.height;
@@ -3059,13 +3118,29 @@ canvas.addEventListener("click", function (e) {
   let mx = Math.round(clickX * scaleX);
   let my = Math.round(clickY * scaleY);
   
-  // Additional safety bounds checking for fullscreen edge cases
+  // Additional safety bounds checking
   mx = Math.max(0, Math.min(canvas.width - 1, mx));
   my = Math.max(0, Math.min(canvas.height - 1, my));
 
   // Check game over overlay first - blocks all other interactions
   if (handleGameOverOverlayClick(mx, my)) {
     return;
+  }
+
+  // Check name input overlay - blocks other interactions when active
+  if (nameInput.active) {
+    for (let button of nameInput.buttons) {
+      if (button.isInside(mx, my)) {
+        if (button.label === "ENTER") {
+          submitNameInput();
+        } else if (button.label === "CANCEL") {
+          // Skip name input - submit as Anonymous
+          submitNameInput();
+        }
+        return;
+      }
+    }
+    return; // Block other clicks when name input is active
   }
 
   if (gameState === "menu") {
@@ -3205,7 +3280,7 @@ canvas.addEventListener("click", function (e) {
       memoryGame.showClassicStartButton = true;
     } else if (memoryGame.showClassicStartButton) {
       // Check if START button was clicked (should not reach here as we transition to memory_classic)
-      let startButton = new Button("START", WIDTH / 2, HEIGHT - 100, 200, 60);
+      let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60);
       if (startButton.isInside(mx, my)) {
         startClassicRound();
       }
@@ -3227,7 +3302,7 @@ canvas.addEventListener("click", function (e) {
 
     // Handle START button click if game hasn't started yet
     if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
-      let startButton = new Button("START", WIDTH / 2, HEIGHT - 80, 200, 60);
+      let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60);
       if (startButton.isInside(mx, my)) {
         memoryGame.gameStarted = true;
         memoryGame.showClassicStartButton = false;
@@ -3408,7 +3483,7 @@ document.addEventListener("keydown", function (e) {
       nameInput.currentName = nameInput.currentName.slice(0, -1);
     } else if (e.key.length === 1 && nameInput.currentName.length < nameInput.maxLength) {
       // Add character if it's printable and under max length
-      if (e.key.match(/[a-zA-Z0-9 !@#$%^&*()_+-=\[\]{};':"\\|,.<>\/?]/)) {
+      if (e.key.match(/[a-zA-Z0-9 ]/)) {
         nameInput.currentName += e.key;
       }
     }
@@ -3425,7 +3500,7 @@ function handleMemoryTileClickClassic(idx) {
   if (memoryGame.firstIdx === null) {
     memoryGame.firstIdx = idx;
     let sfx = assets.sounds["kuku"];
-    if (soundOn && sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+    if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
   } else if (memoryGame.secondIdx === null && idx !== memoryGame.firstIdx) {
     memoryGame.secondIdx = idx;
     memoryGame.lock = true;
@@ -3443,7 +3518,7 @@ function handleMemoryTileClickClassic(idx) {
         memoryGame.pairsFound++;
         memoryGame.feedback = "Match!";
         let sfx = assets.sounds["yupi"];
-        if (soundOn && sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+        if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
 
         // Check if round is complete
         if (memoryGame.pairsFound >= memoryGame.roundPairCount) {
@@ -3455,7 +3530,7 @@ function handleMemoryTileClickClassic(idx) {
         memoryGame.revealed[memoryGame.secondIdx] = false;
         memoryGame.feedback = "Miss!";
         let sfx = assets.sounds["buuuu"];
-        if (soundOn && sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+        if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
       }
 
       memoryGame.firstIdx = null;
@@ -3478,13 +3553,13 @@ function handleMemoryTileClickMemomu(idx) {
     // Correct image found
     memomuGame.found.push(idx);
     let sfx = assets.sounds["yupi"];
-    if (soundOn && sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+    if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
     tile.feedback = "#00ff00";
   } else {
     // Wrong image clicked
     memomuGame.wrongClicks++;
     let sfx = assets.sounds["kuku"];
-    if (soundOn && sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+    if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
     tile.feedback = "#ff0000";
   }
 
@@ -3842,19 +3917,6 @@ function draw() {
   updateUserFeedback();
   drawUserFeedback();
 }
-function goFullScreen() {
-  var elem = document.getElementById('gameCanvas'); // Replace with your canvas or main game container id
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen();
-  } else if (elem.mozRequestFullScreen) { // Firefox
-    elem.mozRequestFullScreen();
-  } else if (elem.webkitRequestFullscreen) { // Chrome, Safari and Opera
-    elem.webkitRequestFullscreen();
-  } else if (elem.msRequestFullscreen) { // IE/Edge
-    elem.msRequestFullscreen();
-  }
-}
-
 // --- GAME LOOP ---
 function gameLoop() {
   draw();
