@@ -3046,7 +3046,7 @@ function drawBattleGrids() {
 canvas.addEventListener("click", function (e) {
   let rect = canvas.getBoundingClientRect();
   
-  // Improved coordinate calculation for fullscreen compatibility
+  // Improved coordinate calculation for canvas scaling
   // Calculate the actual scaling ratio between canvas and its display size
   let scaleX = canvas.width / rect.width;
   let scaleY = canvas.height / rect.height;
@@ -3059,7 +3059,7 @@ canvas.addEventListener("click", function (e) {
   let mx = Math.round(clickX * scaleX);
   let my = Math.round(clickY * scaleY);
   
-  // Additional safety bounds checking for fullscreen edge cases
+  // Additional safety bounds checking for coordinate edge cases
   mx = Math.max(0, Math.min(canvas.width - 1, mx));
   my = Math.max(0, Math.min(canvas.height - 1, my));
 
@@ -3841,18 +3841,6 @@ function draw() {
   // Update and draw user feedback
   updateUserFeedback();
   drawUserFeedback();
-}
-function goFullScreen() {
-  var elem = document.getElementById('gameCanvas'); // Replace with your canvas or main game container id
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen();
-  } else if (elem.mozRequestFullScreen) { // Firefox
-    elem.mozRequestFullScreen();
-  } else if (elem.webkitRequestFullscreen) { // Chrome, Safari and Opera
-    elem.webkitRequestFullscreen();
-  } else if (elem.msRequestFullscreen) { // IE/Edge
-    elem.msRequestFullscreen();
-  }
 }
 
 // --- GAME LOOP ---
