@@ -28,23 +28,6 @@ html, body {
   min-height: 700px;
 }
 
-#fullscreenBtn {
-  position: absolute;
-  top: 60px;
-  left: 20px;
-  z-index: 10;
-  background: none;
-  border: none;
-  color: #836EF9;
-  font-size: 2.2rem;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity 0.2s;
-}
-#fullscreenBtn:hover {
-  opacity: 1;
-}
-
 canvas {
   display: block;
   background: transparent;
