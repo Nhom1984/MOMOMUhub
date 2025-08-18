@@ -147,7 +147,8 @@ class Button {
 }
 
 // --- GAME STATE ---
-let gameState = "loading"; // loading, menu, mode, musicmem_rules, musicmem, memory_menu, memory_classic_rules, memory_classic, memory_memomu_rules, memory_memomu, monluck, battle, leaderboard, musicmem_post_score, memory_memomu_post_score
+const GAME_VERSION = "ver 1.0";
+let gameState = "loading"; // loading, menu, mode, musicmem_rules, musicmem, memory_menu, memory_classic_rules, memory_classic, memory_memomu_rules, memory_memomu, monluck, battle, leaderboard, musicmem_post_score, memory_memomu_post_score, monomnibus
 let menuButtons = [], modeButtons = [], musicMemRulesButtons = [], musicMemButtons = [], memoryMenuButtons = [], memoryClassicRulesButtons = [], memoryClassicButtons = [], memoryMemomuRulesButtons = [], memoryMemomuButtons = [], monluckButtons = [], battleButtons = [], leaderboardButtons = [];
 let soundOn = true;
 
@@ -951,31 +952,45 @@ function showNameInput(mode, score) {
     tempInput.type = 'text';
     tempInput.setAttribute('inputmode', 'text');
     tempInput.setAttribute('autocomplete', 'name');
+    tempInput.setAttribute('autocorrect', 'off');
+    tempInput.setAttribute('autocapitalize', 'words');
     tempInput.style.position = 'fixed';
     tempInput.style.top = '50%';
     tempInput.style.left = '50%';
     tempInput.style.transform = 'translate(-50%, -50%)';
     tempInput.style.opacity = '0.01'; // Nearly invisible but not completely hidden
     tempInput.style.pointerEvents = 'none';
-    tempInput.style.zIndex = '-1';
+    tempInput.style.zIndex = '999999'; // High z-index to ensure visibility
     tempInput.style.width = '1px';
     tempInput.style.height = '1px';
     tempInput.style.border = 'none';
     tempInput.style.background = 'transparent';
+    tempInput.style.fontSize = '16px'; // Prevent zoom on iOS
     
     document.body.appendChild(tempInput);
     
-    // Focus with user interaction simulation for better mobile support
+    // Multiple attempts to focus for better mobile support
     tempInput.focus();
-    tempInput.click();
+    
+    // Additional mobile-specific triggers
+    setTimeout(() => {
+      if (document.body.contains(tempInput)) {
+        tempInput.focus();
+        tempInput.click();
+        
+        // Trigger input event to ensure keyboard appears
+        const inputEvent = new Event('input', { bubbles: true });
+        tempInput.dispatchEvent(inputEvent);
+      }
+    }, 10);
     
     // Keep it around longer for better mobile keyboard persistence
     setTimeout(() => {
       if (document.body.contains(tempInput)) {
         document.body.removeChild(tempInput);
       }
-    }, 500);
-  }, 50);
+    }, 1000); // Increased timeout for better persistence
+  }, 100); // Slightly longer initial delay
 }
 
 function hideNameInput() {
@@ -1399,9 +1414,10 @@ function setupButtons() {
     new Button("MEMORY", WIDTH / 2, modeY + modeGap, 200, 50),
     new Button("MONLUCK", WIDTH / 2, modeY + modeGap * 2, 200, 50),
     new Button("BATTLE", WIDTH / 2, modeY + modeGap * 3, 200, 50),
+    new Button("MONOMNIBUS", WIDTH / 2, modeY + modeGap * 4, 200, 50),
     new Button("WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
     new Button("", WIDTH - 100, 40, 55, 44, "sound"),
-    new Button("BACK", WIDTH / 2, modeY + modeGap * 4, 150, 50)
+    new Button("BACK", WIDTH / 2, modeY + modeGap * 5, 150, 50)
   ];
   musicMemRulesButtons = [
     new Button("Got it!", WIDTH / 2 - 100, HEIGHT - 80, 180, 50),
@@ -1814,7 +1830,7 @@ function getClassicRoundGrid(round) {
 
 function initializeClassicMemoryUpgraded() {
   memoryGame.currentRound = 1;
-  memoryGame.maxRounds = 10;
+  memoryGame.maxRounds = 5; // Reduced from 10 to 5 for better gameplay
   memoryGame.roundScores = [];
   memoryGame.score = 0;
   memoryGame.showRules = true;
@@ -1887,6 +1903,14 @@ function startClassicRound() {
 
 function nextClassicRound() {
   memoryGame.currentRound++;
+  
+  // Safeguard to prevent infinite rounds
+  if (memoryGame.currentRound > memoryGame.maxRounds) {
+    console.warn(`Round count exceeded maximum (${memoryGame.maxRounds}), ending game`);
+    endMemoryClassicGame();
+    return;
+  }
+  
   if (memoryGame.currentRound <= memoryGame.maxRounds) {
     startClassicRound();
   } else {
@@ -1914,7 +1938,7 @@ function endClassicRound() {
       nextClassicRound();
     }, 2000);
   } else {
-    // Game completed after 5 rounds - show game over overlay
+    // Game completed after all rounds - show game over overlay
     memoryGame.feedback = `Game Complete! Final Score: ${memoryGame.score}`;
     setTimeout(() => {
       endMemoryClassicGame();
@@ -2233,6 +2257,9 @@ function drawMenu() {
   
   ctx.fillStyle = "#fff";
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
+  
+  // Version number (bottom left corner)
+  drawVersionNumber();
 }
 function drawModeMenu() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
@@ -2256,6 +2283,9 @@ function drawModeMenu() {
   
   ctx.fillStyle = "#fff";
   ctx.fillText("© 2025 Nhom1984", WIDTH - 35, HEIGHT - 22);
+  
+  // Version number (bottom left corner)
+  drawVersionNumber();
 }
 function drawMemoryMenu() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
@@ -3210,17 +3240,20 @@ canvas.addEventListener("click", function (e) {
       gameState = "battle"; resetBattleGame();
     }
     else if (modeButtons[4].isInside(mx, my)) {
+      gameState = "monomnibus";
+    }
+    else if (modeButtons[5].isInside(mx, my)) {
       // Connect Wallet button - always open modal for wallet management
       connectWallet();
     }
-    else if (modeButtons[5].isInside(mx, my)) {
+    else if (modeButtons[6].isInside(mx, my)) {
       soundOn = !soundOn;
-      modeButtons[5].label = soundOn ? "SOUND ON" : "SOUND OFF";
+      modeButtons[6].label = soundOn ? "SOUND ON" : "SOUND OFF";
       let music = assets.sounds["music"];
       if (soundOn && music) music.play();
       else if (music) music.pause();
     }
-    else if (modeButtons[6].isInside(mx, my)) { gameState = "menu"; }
+    else if (modeButtons[7].isInside(mx, my)) { gameState = "menu"; }
   } else if (gameState === "musicmem_rules") {
     if (musicMemRulesButtons[0].isInside(mx, my)) {
       gameState = "musicmem";
@@ -3470,6 +3503,17 @@ canvas.addEventListener("click", function (e) {
       setTimeout(runMemoryMemomuFlashSequence, 900);
       drawMemoryGameMemomu(); // Redraw the new board
     }
+  } else if (gameState === "monomnibus") {
+    // Handle back button in Monomnibus mode
+    let backButton = new Button("BACK", WIDTH / 2, HEIGHT / 2 + 100, 200, 60);
+    if (backButton.isInside(mx, my)) {
+      gameState = "mode";
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    }
   }
 });
 
@@ -3526,14 +3570,31 @@ function handleMemoryTileClickClassic(idx) {
         endClassicRound();
       }
     } else {
-      // No match - instant feedback, hide immediately, no sound
-      memoryGame.revealed[memoryGame.firstIdx] = false;
-      memoryGame.revealed[memoryGame.secondIdx] = false;
-      memoryGame.feedback = "Keep looking!"; // Changed message as requested
-      // No sound for missed pairs as requested
+      // No match - show both cards briefly before hiding them
+      memoryGame.lock = true; // Lock to prevent more clicks
+      memoryGame.feedback = ""; // Clear feedback initially
+      
+      // Show both cards for a brief moment, then hide and show message
+      setTimeout(() => {
+        memoryGame.revealed[memoryGame.firstIdx] = false;
+        memoryGame.revealed[memoryGame.secondIdx] = false;
+        memoryGame.feedback = "Keep looking!";
+        
+        // Reset for next pair after delay
+        memoryGame.firstIdx = null;
+        memoryGame.secondIdx = null;
+        memoryGame.lock = false;
+        
+        // Redraw to show hidden cards and message
+        drawMemoryGameClassic();
+      }, 800); // Show cards for 800ms before hiding
+      
+      // Redraw immediately to show both revealed cards
+      drawMemoryGameClassic();
+      return; // Exit early to avoid immediate reset below
     }
 
-    // Reset for next pair immediately (no delay for fast gameplay)
+    // Reset for next pair immediately (only for matches)
     memoryGame.firstIdx = null;
     memoryGame.secondIdx = null;
     memoryGame.lock = false;
@@ -3889,6 +3950,41 @@ function drawMemoryMemomuPostScore() {
   playAgainButton.draw();
 }
 
+// --- MONOMNIBUS MODE ---
+function drawMonomnibus() {
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  
+  // Background
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  
+  // Title
+  ctx.font = "60px Arial";
+  ctx.fillStyle = "#ffb6c1";
+  ctx.textAlign = "center";
+  ctx.fillText("MONOMNIBUS", WIDTH / 2, HEIGHT / 2 - 100);
+  
+  // In Works message
+  ctx.font = "36px Arial";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("in works", WIDTH / 2, HEIGHT / 2);
+  
+  // Back button
+  let backButton = new Button("BACK", WIDTH / 2, HEIGHT / 2 + 100, 200, 60);
+  backButton.draw();
+  
+  // Version number (bottom left corner)
+  drawVersionNumber();
+}
+
+// --- VERSION NUMBER HELPER ---
+function drawVersionNumber() {
+  ctx.font = "16px Arial";
+  ctx.fillStyle = "#888";
+  ctx.textAlign = "left";
+  ctx.fillText(GAME_VERSION, 20, HEIGHT - 20);
+}
+
 // --- MAIN DRAW LOOP ---
 function draw() {
   if (gameState === "loading") {
@@ -3911,6 +4007,7 @@ function draw() {
   else if (gameState === "monluck") drawMonluckGame();
   else if (gameState === "battle") drawBattleGame();
   else if (gameState === "leaderboard") drawLeaderboard();
+  else if (gameState === "monomnibus") drawMonomnibus();
 
   // Draw name input overlay on top of everything
   drawNameInput();
