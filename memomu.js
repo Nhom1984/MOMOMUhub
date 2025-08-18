@@ -69,6 +69,7 @@ const soundFiles = [
   { name: "yupi", src: "assets/yupi.mp3" },
   { name: "kuku", src: "assets/kuku.mp3" },
   { name: "buuuu", src: "assets/buuuu.mp3" },
+  { name: "tick", src: "assets/tick.mp3" },
   { name: "music", src: "assets/MEMOMU.mp3" }
 ];
 
@@ -943,25 +944,38 @@ function showNameInput(mode, score) {
     new Button("CANCEL", WIDTH / 2 + 80, HEIGHT / 2 + 100, 140, 40)
   ];
   
-  // Try to trigger mobile keyboard by creating a temporary input field
+  // Improved mobile keyboard trigger with better reliability
   setTimeout(() => {
     // Create a temporary input element to trigger mobile keyboard
     const tempInput = document.createElement('input');
     tempInput.type = 'text';
-    tempInput.style.position = 'absolute';
-    tempInput.style.left = '-9999px';
-    tempInput.style.opacity = '0';
+    tempInput.setAttribute('inputmode', 'text');
+    tempInput.setAttribute('autocomplete', 'name');
+    tempInput.style.position = 'fixed';
+    tempInput.style.top = '50%';
+    tempInput.style.left = '50%';
+    tempInput.style.transform = 'translate(-50%, -50%)';
+    tempInput.style.opacity = '0.01'; // Nearly invisible but not completely hidden
     tempInput.style.pointerEvents = 'none';
+    tempInput.style.zIndex = '-1';
+    tempInput.style.width = '1px';
+    tempInput.style.height = '1px';
+    tempInput.style.border = 'none';
+    tempInput.style.background = 'transparent';
+    
     document.body.appendChild(tempInput);
     
-    // Focus it to trigger keyboard
+    // Focus with user interaction simulation for better mobile support
     tempInput.focus();
+    tempInput.click();
     
-    // Remove it after a short delay
+    // Keep it around longer for better mobile keyboard persistence
     setTimeout(() => {
-      document.body.removeChild(tempInput);
-    }, 100);
-  }, 100);
+      if (document.body.contains(tempInput)) {
+        document.body.removeChild(tempInput);
+      }
+    }, 500);
+  }, 50);
 }
 
 function hideNameInput() {
@@ -3146,14 +3160,8 @@ canvas.addEventListener("click", function (e) {
   if (gameState === "menu") {
     if (menuButtons[0].isInside(mx, my)) { gameState = "mode"; }
     else if (menuButtons[1].isInside(mx, my)) {
-      // Connect Wallet button - MetaMask integration
-      if (walletConnection.isConnected) {
-        // Already connected, show current connection info
-        alert("Wallet already connected: " + getShortAddress(walletConnection.address));
-      } else {
-        // Attempt to connect to MetaMask
-        connectWallet();
-      }
+      // Connect Wallet button - always open modal for wallet management
+      connectWallet();
     }
     else if (menuButtons[2].isInside(mx, my)) {
       soundOn = !soundOn;
@@ -3202,14 +3210,8 @@ canvas.addEventListener("click", function (e) {
       gameState = "battle"; resetBattleGame();
     }
     else if (modeButtons[4].isInside(mx, my)) {
-      // Connect Wallet button - MetaMask integration
-      if (walletConnection.isConnected) {
-        // Already connected, show current connection info
-        alert("Wallet already connected: " + getShortAddress(walletConnection.address));
-      } else {
-        // Attempt to connect to MetaMask
-        connectWallet();
-      }
+      // Connect Wallet button - always open modal for wallet management
+      connectWallet();
     }
     else if (modeButtons[5].isInside(mx, my)) {
       soundOn = !soundOn;
@@ -3499,45 +3501,45 @@ function handleMemoryTileClickClassic(idx) {
   memoryGame.revealed[idx] = true;
   if (memoryGame.firstIdx === null) {
     memoryGame.firstIdx = idx;
-    let sfx = assets.sounds["kuku"];
-    if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+    // No sound for first tile selection to allow rapid clicks
   } else if (memoryGame.secondIdx === null && idx !== memoryGame.firstIdx) {
     memoryGame.secondIdx = idx;
-    memoryGame.lock = true;
     memoryGame.attempts++;
-    drawMemoryGameClassic();
+    
+    // Instantly process the match check for fast gameplay
+    let a = memoryGame.pairIds[memoryGame.firstIdx];
+    let b = memoryGame.pairIds[memoryGame.secondIdx];
 
-    setTimeout(() => {
-      let a = memoryGame.pairIds[memoryGame.firstIdx];
-      let b = memoryGame.pairIds[memoryGame.secondIdx];
+    if (a === b) {
+      // Match found! - instant feedback
+      memoryGame.matched[memoryGame.firstIdx] = true;
+      memoryGame.matched[memoryGame.secondIdx] = true;
+      memoryGame.pairsFound++;
+      memoryGame.feedback = "Match!";
+      
+      // Only play tick.mp3 for found pairs as requested
+      let sfx = assets.sounds["tick"];
+      if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
 
-      if (a === b) {
-        // Match found!
-        memoryGame.matched[memoryGame.firstIdx] = true;
-        memoryGame.matched[memoryGame.secondIdx] = true;
-        memoryGame.pairsFound++;
-        memoryGame.feedback = "Match!";
-        let sfx = assets.sounds["yupi"];
-        if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
-
-        // Check if round is complete
-        if (memoryGame.pairsFound >= memoryGame.roundPairCount) {
-          endClassicRound();
-        }
-      } else {
-        // No match
-        memoryGame.revealed[memoryGame.firstIdx] = false;
-        memoryGame.revealed[memoryGame.secondIdx] = false;
-        memoryGame.feedback = "Miss!";
-        let sfx = assets.sounds["buuuu"];
-        if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
+      // Check if round is complete
+      if (memoryGame.pairsFound >= memoryGame.roundPairCount) {
+        endClassicRound();
       }
+    } else {
+      // No match - instant feedback, hide immediately, no sound
+      memoryGame.revealed[memoryGame.firstIdx] = false;
+      memoryGame.revealed[memoryGame.secondIdx] = false;
+      memoryGame.feedback = "Keep looking!"; // Changed message as requested
+      // No sound for missed pairs as requested
+    }
 
-      memoryGame.firstIdx = null;
-      memoryGame.secondIdx = null;
-      memoryGame.lock = false;
-      drawMemoryGameClassic();
-    }, 900);
+    // Reset for next pair immediately (no delay for fast gameplay)
+    memoryGame.firstIdx = null;
+    memoryGame.secondIdx = null;
+    memoryGame.lock = false;
+    
+    // Redraw immediately to show instant splash messages
+    drawMemoryGameClassic();
   }
 }
 
