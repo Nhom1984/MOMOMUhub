@@ -1919,27 +1919,54 @@ function nextClassicRound() {
   }
 }
 
-function calculateRoundScore(timeUsed) {
+function calculateRoundScore(timeUsed, allPairsFound) {
   let baseScore = memoryGame.pairsFound; // 1 point per pair
-  let timeBonus = Math.max(0, 30 - timeUsed); // seconds under 30
+  
+  // Time bonus is ONLY awarded when all pairs are found in the round
+  let timeBonus = 0;
+  if (allPairsFound) {
+    timeBonus = Math.max(0, 30 - timeUsed); // seconds under 30
+  }
+  
   let multiplier = memoryGame.currentRound; // round number as multiplier
   return baseScore + (timeBonus * multiplier);
 }
 
-function endClassicRound() {
+function endClassicRound(isSuccess = false) {
   let timeUsed = (performance.now() - memoryGame.roundStartTime) / 1000;
-  let roundScore = calculateRoundScore(timeUsed);
+  
+  // Determine if all pairs were found for this round
+  let allPairsFound = memoryGame.pairsFound >= memoryGame.roundPairCount;
+  
+  // Calculate round score - time bonus only awarded if all pairs found
+  let roundScore = calculateRoundScore(timeUsed, allPairsFound);
   memoryGame.roundScores.push(roundScore);
   memoryGame.score += roundScore;
 
-  if (memoryGame.currentRound < memoryGame.maxRounds) {
+  // Safeguard: Prevent accidental double-counting or runaway rounds
+  if (memoryGame.currentRound > memoryGame.maxRounds) {
+    console.warn(`endClassicRound called with round ${memoryGame.currentRound} > max ${memoryGame.maxRounds}, ending game`);
+    endMemoryClassicGame();
+    return;
+  }
+
+  if (isSuccess && allPairsFound && memoryGame.currentRound < memoryGame.maxRounds) {
+    // Round completed successfully - advance to next round
     memoryGame.feedback = `Round ${memoryGame.currentRound} Complete! +${roundScore} points`;
     setTimeout(() => {
       nextClassicRound();
     }, 2000);
-  } else {
-    // Game completed after all rounds - show game over overlay
+  } else if (isSuccess && allPairsFound && memoryGame.currentRound >= memoryGame.maxRounds) {
+    // Game completed successfully after all rounds
     memoryGame.feedback = `Game Complete! Final Score: ${memoryGame.score}`;
+    setTimeout(() => {
+      endMemoryClassicGame();
+    }, 2000);
+  } else {
+    // Failure case: time ran out or player failed to complete round
+    // Award ONLY the pairs found for this round (no time bonus), then end game
+    // Rounds do not advance and no further points are given after failure
+    memoryGame.feedback = `Time's up! Game Over. Final Score: ${memoryGame.score}`;
     setTimeout(() => {
       endMemoryClassicGame();
     }, 2000);
@@ -2600,9 +2627,9 @@ function drawMemoryGameClassic() {
     let elapsed = (performance.now() - memoryGame.roundStartTime) / 1000;
     memoryGame.timeRemaining = Math.max(0, 30 - elapsed);
 
-    // Check if time's up
+    // Check if time's up - failure case: no round advancement, game ends
     if (memoryGame.timeRemaining <= 0 && memoryGame.pairsFound < memoryGame.roundPairCount) {
-      endClassicRound();
+      endClassicRound(false); // false = failure, no time bonus, game ends
     }
   }
 
@@ -3565,9 +3592,9 @@ function handleMemoryTileClickClassic(idx) {
       let sfx = assets.sounds["tick"];
       if (sfx) { try { sfx.currentTime = 0; sfx.play(); } catch (e) { } }
 
-      // Check if round is complete
+      // Check if round is complete - success case: all pairs found
       if (memoryGame.pairsFound >= memoryGame.roundPairCount) {
-        endClassicRound();
+        endClassicRound(true); // true = success, time bonus awarded, advance round
       }
     } else {
       // No match - show both cards briefly before hiding them
