@@ -147,7 +147,7 @@ class Button {
 }
 
 // --- GAME STATE ---
-const GAME_VERSION = "ver 1.1";
+const GAME_VERSION = "ver 1.0";
 let gameState = "loading"; // loading, menu, mode, musicmem_rules, musicmem, memory_menu, memory_classic_rules, memory_classic, memory_memomu_rules, memory_memomu, monluck, battle, leaderboard, musicmem_post_score, memory_memomu_post_score, monomnibus
 let menuButtons = [], modeButtons = [], musicMemRulesButtons = [], musicMemButtons = [], memoryMenuButtons = [], memoryClassicRulesButtons = [], memoryClassicButtons = [], memoryMemomuRulesButtons = [], memoryMemomuButtons = [], monluckButtons = [], battleButtons = [], leaderboardButtons = [];
 let soundOn = true;
@@ -273,12 +273,7 @@ let memoryGame = {
   gameCompleted: false,
   allImages: [], // All available images for pairs
   roundPairCount: 0,
-  gameStarted: false, // Track if game has actually started (timer and cards enabled)
-  
-  // Robust bugfix flags for preventing infinite scoring and mobile input issues
-  roundActive: false, // Prevents rounds from being ended/advanced twice
-  inputLock: false, // Global input lock for debouncing mobile taps
-  lastInputTime: 0 // Track last input time for debouncing
+  gameStarted: false // Track if game has actually started (timer and cards enabled)
 };
 
 // --- MEMOMU MEMORY MODE DATA ---
@@ -944,11 +939,10 @@ function showNameInput(mode, score) {
   nameInput.score = score;
   nameInput.currentName = "";
   
-  // Create Enter, Cancel, and Show Keyboard buttons for mobile
+  // Create Enter and Cancel buttons for mobile
   nameInput.buttons = [
-    new Button("ENTER", WIDTH / 2 - 120, HEIGHT / 2 + 100, 100, 40),
-    new Button("CANCEL", WIDTH / 2, HEIGHT / 2 + 100, 100, 40),
-    new Button("SHOW KEYBOARD", WIDTH / 2 + 120, HEIGHT / 2 + 100, 100, 40)
+    new Button("ENTER", WIDTH / 2 - 80, HEIGHT / 2 + 100, 140, 40),
+    new Button("CANCEL", WIDTH / 2 + 80, HEIGHT / 2 + 100, 140, 40)
   ];
   
   // Improved mobile keyboard trigger with better reliability
@@ -1160,7 +1154,7 @@ function drawNameInput() {
   // Instructions
   ctx.font = "16px Arial";
   ctx.fillStyle = "#444";
-  ctx.fillText("Press ENTER to submit, ESC to skip, or SHOW KEYBOARD for mobile", WIDTH / 2, HEIGHT / 2 + 70);
+  ctx.fillText("Press ENTER to submit or ESC to skip", WIDTH / 2, HEIGHT / 2 + 70);
 
   // Draw mobile buttons
   nameInput.buttons.forEach(button => button.draw());
@@ -1843,11 +1837,6 @@ function initializeClassicMemoryUpgraded() {
   memoryGame.showClassicStartButton = false; // Reset start button flag
   memoryGame.gameCompleted = false;
 
-  // Reset robust bugfix flags
-  memoryGame.roundActive = false;
-  memoryGame.inputLock = false;
-  memoryGame.lastInputTime = 0;
-
   // Prepare all available images (1-33 + monad = 34 total)
   memoryGame.allImages = [];
   for (let i = 1; i <= 33; i++) {
@@ -1909,7 +1898,6 @@ function startMemoryGameClassic() {
 function startClassicRound() {
   setupClassicRound(memoryGame.currentRound);
   memoryGame.gameStarted = true; // For subsequent rounds, start immediately
-  memoryGame.roundActive = true; // Enable round ending and input processing
   gameState = "memory_classic";
 }
 
@@ -1945,15 +1933,6 @@ function calculateRoundScore(timeUsed, allPairsFound) {
 }
 
 function endClassicRound(isSuccess = false) {
-  // Prevent double execution with roundActive flag
-  if (!memoryGame.roundActive) {
-    console.warn('endClassicRound called but round not active, ignoring');
-    return;
-  }
-  
-  // Immediately mark round as inactive to prevent re-entry
-  memoryGame.roundActive = false;
-  
   let timeUsed = (performance.now() - memoryGame.roundStartTime) / 1000;
   
   // Determine if all pairs were found for this round
@@ -3388,14 +3367,13 @@ canvas.addEventListener("click", function (e) {
       let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60);
       if (startButton.isInside(mx, my)) {
         memoryGame.gameStarted = true;
-        memoryGame.roundActive = true; // Enable round ending and input processing
         memoryGame.showClassicStartButton = false;
         memoryGame.roundStartTime = performance.now(); // Start the timer now
       }
     }
 
-    // Only allow tile clicks if game has started and round is active
-    if (!memoryGame.lock && memoryGame.timeRemaining > 0 && memoryGame.gameStarted && memoryGame.roundActive) {
+    // Only allow tile clicks if game has started
+    if (!memoryGame.lock && memoryGame.timeRemaining > 0 && memoryGame.gameStarted) {
       for (let i = 0; i < memoryGame.grid.length; i++) {
         let tile = memoryGame.grid[i];
         if (
@@ -3566,178 +3544,6 @@ canvas.addEventListener("click", function (e) {
   }
 });
 
-// --- TOUCH EVENT HANDLERS WITH DEBOUNCING ---
-// Global touch debouncing state
-let lastTouchTime = 0;
-const TOUCH_DEBOUNCE_MS = 200; // 200ms debounce for touch events
-
-// Helper function to handle both touch and mouse coordinates with debouncing
-function handleInput(clientX, clientY, eventType = 'unknown') {
-  const currentTime = performance.now();
-  
-  // Debounce rapid inputs (especially important for mobile double-tap issues)
-  if (currentTime - lastTouchTime < TOUCH_DEBOUNCE_MS) {
-    console.log(`Input debounced: ${eventType} (${currentTime - lastTouchTime}ms since last)`);
-    return false;
-  }
-  lastTouchTime = currentTime;
-  
-  let rect = canvas.getBoundingClientRect();
-  
-  // Improved coordinate calculation for responsive display
-  let scaleX = canvas.width / rect.width;
-  let scaleY = canvas.height / rect.height;
-  
-  // Get the position relative to the canvas element
-  let x = clientX - rect.left;
-  let y = clientY - rect.top;
-  
-  // Scale to match canvas coordinates
-  let mx = Math.round(x * scaleX);
-  let my = Math.round(y * scaleY);
-  
-  // Additional safety bounds checking
-  mx = Math.max(0, Math.min(canvas.width - 1, mx));
-  my = Math.max(0, Math.min(canvas.height - 1, my));
-  
-  console.log(`Input processed: ${eventType} at (${mx}, ${my})`);
-  return { mx, my };
-}
-
-// Touch start event with debouncing
-canvas.addEventListener("touchstart", function (e) {
-  e.preventDefault(); // Prevent default touch behavior and double-tap zoom
-  
-  if (e.touches.length === 1) { // Single touch only
-    const touch = e.touches[0];
-    const coords = handleInput(touch.clientX, touch.clientY, 'touchstart');
-    
-    if (coords) {
-      // Use the same click logic but need to copy it here since we need the unified handler
-      // Check game over overlay first - blocks all other interactions
-      if (handleGameOverOverlayClick(coords.mx, coords.my)) {
-        return;
-      }
-
-      // Check name input overlay - blocks other interactions when active
-      if (nameInput.active) {
-        for (let button of nameInput.buttons) {
-          if (button.isInside(coords.mx, coords.my)) {
-            if (button.label === "ENTER") {
-              submitNameInput();
-            } else if (button.label === "CANCEL") {
-              // Skip name input - submit as Anonymous
-              submitNameInput();
-            } else if (button.label === "SHOW KEYBOARD") {
-              // Mobile keyboard fallback button
-              showMobileKeyboard();
-            }
-            return;
-          }
-        }
-        return; // Block other clicks when name input is active
-      }
-
-      // Handle Classic Memory tile clicks with enhanced mobile support
-      if (gameState === "memory_classic") {
-        if (memoryClassicButtons[0].isInside(coords.mx, coords.my)) { 
-          gameState = "menu";
-          // Restore background music when returning to main menu
-          let music = assets.sounds["music"];
-          if (soundOn && music) {
-            music.play();
-          }
-        }
-
-        // Handle START button click if game hasn't started yet
-        if (memoryGame.showClassicStartButton && !memoryGame.gameStarted) {
-          let startButton = new Button("START", WIDTH / 2, HEIGHT - 160, 200, 60);
-          if (startButton.isInside(coords.mx, coords.my)) {
-            memoryGame.gameStarted = true;
-            memoryGame.roundActive = true; // Enable round ending and input processing
-            memoryGame.showClassicStartButton = false;
-            memoryGame.roundStartTime = performance.now(); // Start the timer now
-          }
-        }
-
-        // Only allow tile clicks if game has started and round is active
-        if (!memoryGame.lock && memoryGame.timeRemaining > 0 && memoryGame.gameStarted && memoryGame.roundActive) {
-          for (let i = 0; i < memoryGame.grid.length; i++) {
-            let tile = memoryGame.grid[i];
-            if (
-              coords.mx >= tile.x &&
-              coords.mx <= tile.x + tile.size &&
-              coords.my >= tile.y &&
-              coords.my <= tile.y + tile.size
-            ) {
-              handleMemoryTileClickClassic(i);
-              drawMemoryGameClassic();
-              break;
-            }
-          }
-        }
-      }
-    }
-  }
-}, { passive: false });
-
-// Touch end event (for better mobile compatibility)
-canvas.addEventListener("touchend", function (e) {
-  e.preventDefault(); // Prevent default touch behavior
-}, { passive: false });
-
-// Mobile keyboard fallback function
-function showMobileKeyboard() {
-  // Create a more persistent input field for mobile keyboard
-  const mobileInput = document.createElement('input');
-  mobileInput.type = 'text';
-  mobileInput.setAttribute('inputmode', 'text');
-  mobileInput.setAttribute('autocomplete', 'name');
-  mobileInput.setAttribute('autocorrect', 'off');
-  mobileInput.setAttribute('autocapitalize', 'words');
-  mobileInput.setAttribute('placeholder', 'Enter your name');
-  mobileInput.style.position = 'fixed';
-  mobileInput.style.top = '50%';
-  mobileInput.style.left = '50%';
-  mobileInput.style.transform = 'translate(-50%, -50%)';
-  mobileInput.style.zIndex = '999999';
-  mobileInput.style.padding = '10px';
-  mobileInput.style.fontSize = '16px';
-  mobileInput.style.border = '2px solid #ff69b4';
-  mobileInput.style.borderRadius = '5px';
-  mobileInput.style.background = '#fff';
-  mobileInput.style.color = '#000';
-  mobileInput.style.textAlign = 'center';
-  mobileInput.style.width = '250px';
-  
-  document.body.appendChild(mobileInput);
-  
-  // Focus and show keyboard
-  mobileInput.focus();
-  mobileInput.click();
-  
-  // Handle input
-  mobileInput.addEventListener('input', function() {
-    nameInput.currentName = mobileInput.value;
-  });
-  
-  mobileInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      submitNameInput();
-      document.body.removeChild(mobileInput);
-    } else if (e.key === 'Escape') {
-      document.body.removeChild(mobileInput);
-    }
-  });
-  
-  // Auto-remove after 30 seconds
-  setTimeout(() => {
-    if (document.body.contains(mobileInput)) {
-      document.body.removeChild(mobileInput);
-    }
-  }, 30000);
-}
-
 // --- KEYBOARD EVENT HANDLER ---
 document.addEventListener("keydown", function (e) {
   if (nameInput.active) {
@@ -3760,26 +3566,8 @@ document.addEventListener("keydown", function (e) {
 
 // --- MEMORY CLASSIC CLICK LOGIC ---
 function handleMemoryTileClickClassic(idx) {
-  // Robust input validation with debouncing
-  const currentTime = performance.now();
-  const INPUT_DEBOUNCE_MS = 150; // Debounce rapid taps for 150ms
-  
-  // Check all locking conditions
-  if (memoryGame.lock || memoryGame.inputLock || !memoryGame.roundActive) return;
-  if (memoryGame.revealed[idx] || memoryGame.matched[idx]) return;
+  if (memoryGame.lock || memoryGame.revealed[idx] || memoryGame.matched[idx]) return;
   if (memoryGame.timeRemaining <= 0) return; // Time's up
-  
-  // Debounce rapid inputs (especially important for mobile)
-  if (currentTime - memoryGame.lastInputTime < INPUT_DEBOUNCE_MS) {
-    return;
-  }
-  memoryGame.lastInputTime = currentTime;
-  
-  // Temporarily lock input to prevent double-taps
-  memoryGame.inputLock = true;
-  setTimeout(() => {
-    memoryGame.inputLock = false;
-  }, INPUT_DEBOUNCE_MS);
 
   memoryGame.revealed[idx] = true;
   if (memoryGame.firstIdx === null) {
