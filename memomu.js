@@ -903,37 +903,20 @@ function showGameOverOverlay(mode, finalScore) {
     return;
   }
 
-  // For Music Memory, MEMOMU, Classic Memory: Always show unified light pink modal overlay
-  if (mode === "musicMemory" || mode === "memoryMemomu" || mode === "memoryClassic") {
+  // For Music Memory, MEMOMU, Classic Memory, and Monluck games without wallet:
+  // Don't show overlay with buttons, instead show score table and transition to post-score state
+  if (mode === "musicMemory" || mode === "memoryMemomu" || mode === "memoryClassic" || mode === "monluck") {
     // Add to high scores without name (wallet policy: no leaderboard access without wallet)
     addHighScore(mode, finalScore);
 
-    // Show the unified overlay with AGAIN and MENU buttons
-    gameOverOverlay.active = true;
-    gameOverOverlay.mode = mode;
-    gameOverOverlay.finalScore = finalScore;
-
-    // Setup overlay buttons with proper labels
-    gameOverOverlay.buttons = [
-      new Button("AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
-      new Button("MENU", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50)
-    ];
-    return;
-  }
-
-  // For Monluck: Use the same unified overlay system  
-  if (mode === "monluck") {
-    addHighScore(mode, finalScore);
-    
-    gameOverOverlay.active = true;
-    gameOverOverlay.mode = mode;
-    gameOverOverlay.finalScore = finalScore;
-
-    // Setup overlay buttons
-    gameOverOverlay.buttons = [
-      new Button("AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
-      new Button("MENU", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50)
-    ];
+    // Show score table without buttons for a moment, then transition to post-score state
+    setTimeout(() => {
+      if (mode === "musicMemory") {
+        gameState = "musicmem_post_score";
+      } else if (mode === "memoryMemomu") {
+        gameState = "memory_memomu_post_score";
+      }
+    }, 3000); // Show score for 3 seconds before showing post-score state
     return;
   }
 
@@ -946,7 +929,7 @@ function showGameOverOverlay(mode, finalScore) {
 
   // Setup overlay buttons
   gameOverOverlay.buttons = [
-    new Button("AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
+    new Button("PLAY AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
     new Button("MENU", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50)
   ];
 }
@@ -1058,7 +1041,7 @@ function submitNameInput() {
     gameOverOverlay.mode = mode;
     gameOverOverlay.finalScore = nameInput.score;
     gameOverOverlay.buttons = [
-      new Button("AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
+      new Button("PLAY AGAIN", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50),
       new Button("MENU", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50)
     ];
   }
@@ -1109,9 +1092,23 @@ function handleGameOverOverlayClick(mx, my) {
 
   for (let button of gameOverOverlay.buttons) {
     if (button.isInside(mx, my)) {
-      if (button.label === "AGAIN") {
+      if (button.label === "PLAY AGAIN") {
         hideGameOverOverlay();
-        restartCurrentGame();
+        if (gameOverOverlay.mode === "musicMemory") {
+          gameState = "musicmem";
+          startMusicMemoryGame(false); // No splash for PLAY AGAIN
+          startMemoryPhase(); // Start immediately like pressing START
+          drawMusicMemory(); // Redraw the new board
+        } else if (gameOverOverlay.mode === "memoryMemomu") {
+          gameState = "memory_memomu";
+          memomuGame.showGo = false;
+          startMemoryGameMemomu(false); // No splash for PLAY AGAIN
+          // Start immediately like pressing GO - trigger the flash sequence after a short delay
+          setTimeout(runMemoryMemomuFlashSequence, 900);
+          drawMemoryGameMemomu(); // Redraw the new board
+        } else {
+          restartCurrentGame();
+        }
       } else if (button.label === "MENU") {
         hideGameOverOverlay();
         // For music memory, classic, and memomu modes, go to mode menu instead of main menu
@@ -2979,6 +2976,14 @@ function drawMonluckGame() {
     quitButton.draw();
   }
 
+  // Show AGAIN and MENU buttons only when finished (on score table)
+  if (monluckGame.finished) { // CHANGED: Removed showSplash condition
+    let againButton = new Button("AGAIN", WIDTH / 2 - 100, HEIGHT - 60, 160, 48);
+    let menuButton = new Button("MENU", WIDTH / 2 + 100, HEIGHT - 60, 160, 48);
+    againButton.draw();
+    menuButton.draw();
+  }
+
   // Only show score in the result text when game is finished
   if (monluckGame.finished) {
     ctx.font = "28px Arial";
@@ -2999,7 +3004,7 @@ function drawMonluckGame() {
 function drawBattleGame() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
   if (battleGame.state === "rules") {
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = "#222";
     ctx.fillRect(WIDTH / 2 - 340, HEIGHT / 2 - 220, 680, 380);
     ctx.fillStyle = "#ffb6c1";
     ctx.strokeStyle = "#ff69b4";
@@ -3064,7 +3069,7 @@ function drawBattleGame() {
   } else if (battleGame.state === "vs" || battleGame.state === "fight") {
     drawBattleGrids();
   } else if (battleGame.state === "end") {
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = "#222";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
     // Avatars are 300% bigger (130px -> 390px) 
@@ -3113,7 +3118,7 @@ function drawBattleGame() {
   drawGameOverOverlay();
 }
 function drawBattleGrids() {
-  ctx.fillStyle = "#1a1a2e";
+  ctx.fillStyle = "#222";
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   let img_sz = 100, grid_img_sz = 58;
   let pimg = assets.images[`avatar${battleGame.player + 1}`], oimg = assets.images[`avatar${battleGame.opponent + 1}`];
@@ -3436,8 +3441,25 @@ canvas.addEventListener("click", function (e) {
       }
     }
   } else if (gameState === "monluck") {
-    // Handle QUIT button during gameplay only
-    if (!monluckGame.finished) {
+    // Handle AGAIN and MENU buttons when game is finished
+    if (monluckGame.finished) { // CHANGED: Removed showSplash condition
+      let againButton = new Button("AGAIN", WIDTH / 2 - 100, HEIGHT - 60, 160, 48);
+      let menuButton = new Button("MENU", WIDTH / 2 + 100, HEIGHT - 60, 160, 48);
+      if (againButton.isInside(mx, my)) {
+        startMonluckGame();
+        drawMonluckGame();
+      } else if (menuButton.isInside(mx, my)) {
+        // Leaving MONLUCK mode - restore background music if sound is on
+        let music = assets.sounds["music"];
+        if (soundOn && music) {
+          music.play();
+        }
+        gameState = "mode";
+      }
+    }
+
+    // Handle QUIT button during gameplay
+    if (!monluckGame.finished) { // CHANGED: Removed showSplash condition
       let quitButton = new Button("QUIT", WIDTH / 2, HEIGHT - 60, 160, 48);
       if (quitButton.isInside(mx, my)) {
         // Leaving MONLUCK mode - restore background music if sound is on
@@ -3450,7 +3472,7 @@ canvas.addEventListener("click", function (e) {
     }
 
     // Handle tile clicks for gameplay
-    if (!monluckGame.finished) {
+    if (!monluckGame.finished) { // CHANGED: Removed showSplash condition
       for (let i = 0; i < monluckGame.grid.length; i++) {
         let tile = monluckGame.grid[i];
         if (
@@ -3496,6 +3518,46 @@ canvas.addEventListener("click", function (e) {
       if (soundOn && music) {
         music.play();
       }
+    }
+  } else if (gameState === "musicmem_post_score") {
+    // Handle MENU and PLAY AGAIN buttons in post-score state
+    let menuButton = new Button("MENU", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50);
+    let playAgainButton = new Button("PLAY AGAIN", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50);
+
+    if (menuButton.isInside(mx, my)) {
+      gameState = "mode";  // Go to mode menu instead of main menu
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    } else if (playAgainButton.isInside(mx, my)) {
+      // Start new Music Memory game immediately
+      gameState = "musicmem";
+      startMusicMemoryGame(false); // No splash for PLAY AGAIN
+      startMemoryPhase(); // Start immediately like pressing START
+      drawMusicMemory(); // Redraw the new board
+    }
+  } else if (gameState === "memory_memomu_post_score") {
+    // Handle MENU and PLAY AGAIN buttons in post-score state
+    let menuButton = new Button("MENU", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50);
+    let playAgainButton = new Button("PLAY AGAIN", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50);
+
+    if (menuButton.isInside(mx, my)) {
+      gameState = "mode";  // Go to mode menu instead of main menu
+      // Restore background music when returning to mode menu
+      let music = assets.sounds["music"];
+      if (soundOn && music) {
+        music.play();
+      }
+    } else if (playAgainButton.isInside(mx, my)) {
+      // Start new MEMOMU game immediately
+      gameState = "memory_memomu";
+      memomuGame.showGo = false;
+      startMemoryGameMemomu(false); // No splash for PLAY AGAIN
+      // Start immediately like pressing GO - trigger the flash sequence after a short delay
+      setTimeout(runMemoryMemomuFlashSequence, 900);
+      drawMemoryGameMemomu(); // Redraw the new board
     }
   } else if (gameState === "monomnibus") {
     // Handle back button in Monomnibus mode
@@ -3754,8 +3816,7 @@ function handleMonluckTileClick(idx) {
     const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
     updateMonluckLeaderboard(playerName, walletAddress, 5, monluckGame.bestSessionStreak);
 
-    // Show unified end-game overlay
-    endMonluckGame();
+    // REMOVED: Success splash screen - game ends immediately
   } else if (monluckGame.clicks >= 5) {
     // Game over - 5 tries used up
     monluckGame.result = `Game Over! Found ${monluckGame.found.length}/5 monads in 5 tries. Score: ${monluckGame.score}`;
@@ -3774,8 +3835,7 @@ function handleMonluckTileClick(idx) {
       monluckGame.currentStreak = 0;
     }
 
-    // Show unified end-game overlay
-    endMonluckGame();
+    // REMOVED: Game over splash screen - game ends immediately
   }
 }
 
@@ -3930,6 +3990,22 @@ function drawMusicMemoryPostScore() {
   playAgainButton.draw();
 }
 
+function drawMemoryMemomuPostScore() {
+  // Draw the game board in its final state
+  drawMemoryGameMemomu();
+
+  // Draw overlay for post-score buttons
+  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // Draw MENU and PLAY AGAIN buttons
+  let menuButton = new Button("MENU", WIDTH / 2 - 120, HEIGHT / 2 + 80, 200, 50);
+  let playAgainButton = new Button("PLAY AGAIN", WIDTH / 2 + 120, HEIGHT / 2 + 80, 200, 50);
+
+  menuButton.draw();
+  playAgainButton.draw();
+}
+
 // --- MONOMNIBUS MODE ---
 function drawMonomnibus() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
@@ -3983,6 +4059,7 @@ function draw() {
   else if (gameState === "memory_classic") drawMemoryGameClassic();
   else if (gameState === "memory_memomu_rules") drawMemomuMemoryRules();
   else if (gameState === "memory_memomu") drawMemoryGameMemomu();
+  else if (gameState === "memory_memomu_post_score") drawMemoryMemomuPostScore();
   else if (gameState === "monluck") drawMonluckGame();
   else if (gameState === "battle") drawBattleGame();
   else if (gameState === "leaderboard") drawLeaderboard();
