@@ -253,6 +253,7 @@ let memoryGame = {
   firstIdx: null,
   secondIdx: null,
   lock: false,
+  roundActive: true, // Global round lock to prevent multiple round-end calls
   pairsFound: 0,
   attempts: 0,
   feedback: "",
@@ -945,52 +946,66 @@ function showNameInput(mode, score) {
     new Button("CANCEL", WIDTH / 2 + 80, HEIGHT / 2 + 100, 140, 40)
   ];
   
-  // Improved mobile keyboard trigger with better reliability
-  setTimeout(() => {
-    // Create a temporary input element to trigger mobile keyboard
-    const tempInput = document.createElement('input');
-    tempInput.type = 'text';
-    tempInput.setAttribute('inputmode', 'text');
-    tempInput.setAttribute('autocomplete', 'name');
-    tempInput.setAttribute('autocorrect', 'off');
-    tempInput.setAttribute('autocapitalize', 'words');
-    tempInput.style.position = 'fixed';
-    tempInput.style.top = '50%';
-    tempInput.style.left = '50%';
-    tempInput.style.transform = 'translate(-50%, -50%)';
-    tempInput.style.opacity = '0.01'; // Nearly invisible but not completely hidden
-    tempInput.style.pointerEvents = 'none';
-    tempInput.style.zIndex = '999999'; // High z-index to ensure visibility
-    tempInput.style.width = '1px';
-    tempInput.style.height = '1px';
-    tempInput.style.border = 'none';
-    tempInput.style.background = 'transparent';
-    tempInput.style.fontSize = '16px'; // Prevent zoom on iOS
-    
-    document.body.appendChild(tempInput);
-    
-    // Multiple attempts to focus for better mobile support
-    tempInput.focus();
-    
-    // Additional mobile-specific triggers
+  // Enhanced mobile detection for iOS/Android
+  const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                   ('ontouchstart' in window) ||
+                   (navigator.maxTouchPoints > 0) ||
+                   (navigator.msMaxTouchPoints > 0);
+  
+  if (isMobile) {
+    // Improved mobile keyboard trigger with better reliability for iOS/Android
     setTimeout(() => {
-      if (document.body.contains(tempInput)) {
-        tempInput.focus();
-        tempInput.click();
-        
-        // Trigger input event to ensure keyboard appears
-        const inputEvent = new Event('input', { bubbles: true });
-        tempInput.dispatchEvent(inputEvent);
-      }
-    }, 10);
-    
-    // Keep it around longer for better mobile keyboard persistence
-    setTimeout(() => {
-      if (document.body.contains(tempInput)) {
-        document.body.removeChild(tempInput);
-      }
-    }, 1000); // Increased timeout for better persistence
-  }, 100); // Slightly longer initial delay
+      // Create a temporary input element to trigger mobile keyboard
+      const tempInput = document.createElement('input');
+      tempInput.type = 'text';
+      tempInput.setAttribute('inputmode', 'text'); // Text keyboard for letters
+      tempInput.setAttribute('pattern', '[A-Za-z]*'); // Letter-only pattern for keyboard hint
+      tempInput.setAttribute('autocomplete', 'name');
+      tempInput.setAttribute('autocorrect', 'off');
+      tempInput.setAttribute('autocapitalize', 'words');
+      tempInput.setAttribute('spellcheck', 'false');
+      tempInput.style.position = 'fixed';
+      tempInput.style.top = '50%';
+      tempInput.style.left = '50%';
+      tempInput.style.transform = 'translate(-50%, -50%)';
+      tempInput.style.opacity = '0.01'; // Nearly invisible but not completely hidden
+      tempInput.style.pointerEvents = 'none';
+      tempInput.style.zIndex = '999999'; // High z-index to ensure visibility
+      tempInput.style.width = '1px';
+      tempInput.style.height = '1px';
+      tempInput.style.border = 'none';
+      tempInput.style.background = 'transparent';
+      tempInput.style.fontSize = '16px'; // Prevent zoom on iOS
+      
+      document.body.appendChild(tempInput);
+      
+      // Multiple attempts to focus for better mobile support
+      tempInput.focus();
+      
+      // Additional mobile-specific triggers for iOS/Android
+      setTimeout(() => {
+        if (document.body.contains(tempInput)) {
+          tempInput.focus();
+          tempInput.click();
+          
+          // Trigger input event to ensure keyboard appears
+          const inputEvent = new Event('input', { bubbles: true });
+          tempInput.dispatchEvent(inputEvent);
+          
+          // Additional trigger for stubborn mobile keyboards
+          const touchEvent = new TouchEvent('touchstart', { bubbles: true });
+          tempInput.dispatchEvent(touchEvent);
+        }
+      }, 10);
+      
+      // Keep it around longer for better mobile keyboard persistence
+      setTimeout(() => {
+        if (document.body.contains(tempInput)) {
+          document.body.removeChild(tempInput);
+        }
+      }, 1500); // Increased timeout for better persistence on mobile
+    }, 100); // Slightly longer initial delay
+  }
 }
 
 function hideNameInput() {
@@ -1836,6 +1851,7 @@ function initializeClassicMemoryUpgraded() {
   memoryGame.showRules = true;
   memoryGame.showClassicStartButton = false; // Reset start button flag
   memoryGame.gameCompleted = false;
+  memoryGame.roundActive = true; // Initialize round as active
 
   // Prepare all available images (1-33 + monad = 34 total)
   memoryGame.allImages = [];
@@ -1898,6 +1914,7 @@ function startMemoryGameClassic() {
 function startClassicRound() {
   setupClassicRound(memoryGame.currentRound);
   memoryGame.gameStarted = true; // For subsequent rounds, start immediately
+  memoryGame.roundActive = true; // Enable round activity
   gameState = "memory_classic";
 }
 
@@ -1933,6 +1950,10 @@ function calculateRoundScore(timeUsed, allPairsFound) {
 }
 
 function endClassicRound(isSuccess = false) {
+  // Prevent multiple calls to round-end logic
+  if (!memoryGame.roundActive) return;
+  memoryGame.roundActive = false;
+  
   let timeUsed = (performance.now() - memoryGame.roundStartTime) / 1000;
   
   // Determine if all pairs were found for this round
@@ -3566,7 +3587,7 @@ document.addEventListener("keydown", function (e) {
 
 // --- MEMORY CLASSIC CLICK LOGIC ---
 function handleMemoryTileClickClassic(idx) {
-  if (memoryGame.lock || memoryGame.revealed[idx] || memoryGame.matched[idx]) return;
+  if (!memoryGame.roundActive || memoryGame.lock || memoryGame.revealed[idx] || memoryGame.matched[idx]) return;
   if (memoryGame.timeRemaining <= 0) return; // Time's up
 
   memoryGame.revealed[idx] = true;
@@ -3597,26 +3618,27 @@ function handleMemoryTileClickClassic(idx) {
         endClassicRound(true); // true = success, time bonus awarded, advance round
       }
     } else {
-      // No match - show both cards briefly before hiding them
-      memoryGame.lock = true; // Lock to prevent more clicks
-      memoryGame.feedback = ""; // Clear feedback initially
+      // No match - show "Keep looking!" instantly for fast, fluid gameplay
+      memoryGame.feedback = "Keep looking!";
       
-      // Show both cards for a brief moment, then hide and show message
+      // Show both cards briefly, then hide them with minimal delay
       setTimeout(() => {
         memoryGame.revealed[memoryGame.firstIdx] = false;
         memoryGame.revealed[memoryGame.secondIdx] = false;
-        memoryGame.feedback = "Keep looking!";
         
-        // Reset for next pair after delay
+        // Reset for next pair immediately for rapid play
         memoryGame.firstIdx = null;
         memoryGame.secondIdx = null;
         memoryGame.lock = false;
         
-        // Redraw to show hidden cards and message
+        // Redraw to show hidden cards
         drawMemoryGameClassic();
-      }, 800); // Show cards for 800ms before hiding
+      }, 200); // Reduced from 800ms to 200ms for faster gameplay
       
-      // Redraw immediately to show both revealed cards
+      // Lock briefly to prevent rapid clicking during card flip
+      memoryGame.lock = true;
+      
+      // Redraw immediately to show both revealed cards and instant feedback
       drawMemoryGameClassic();
       return; // Exit early to avoid immediate reset below
     }
