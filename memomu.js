@@ -889,16 +889,24 @@ function testWalletIntegration() {
 function showGameOverOverlay(mode, finalScore) {
   // Check if this is a leaderboard mode and if score qualifies for top 10
   const leaderboardModes = ["musicMemory", "memoryClassic", "memoryMemomu"];
-  if (leaderboardModes.includes(mode) && isTopTenScore(mode, finalScore)) {
-    // Show name input instead of game over overlay
+  
+  // For Battle Mode: Keep existing behavior (no wallet requirement)
+  if (mode === "battle" && isTopTenScore(mode, finalScore)) {
+    showNameInput(mode, finalScore);
+    return;
+  }
+  
+  // For other leaderboard modes: Only show name input if wallet is connected
+  if (leaderboardModes.includes(mode) && isTopTenScore(mode, finalScore) && walletConnection.isConnected) {
+    // Show name input for wallet-connected users with qualifying scores
     showNameInput(mode, finalScore);
     return;
   }
 
-  // For Music Memory and MEMOMU games, don't show overlay with buttons
-  // Instead show score table and transition to post-score state
-  if (mode === "musicMemory" || mode === "memoryMemomu") {
-    // Add to high scores without name
+  // For Music Memory, MEMOMU, Classic Memory, and Monluck games without wallet:
+  // Don't show overlay with buttons, instead show score table and transition to post-score state
+  if (mode === "musicMemory" || mode === "memoryMemomu" || mode === "memoryClassic" || mode === "monluck") {
+    // Add to high scores without name (wallet policy: no leaderboard access without wallet)
     addHighScore(mode, finalScore);
 
     // Show score table without buttons for a moment, then transition to post-score state
@@ -3618,8 +3626,7 @@ function handleMemoryTileClickClassic(idx) {
         endClassicRound(true); // true = success, time bonus awarded, advance round
       }
     } else {
-      // No match - show "Keep looking!" instantly for fast, fluid gameplay
-      memoryGame.feedback = "Keep looking!";
+      // No match - hide both cards briefly, then reset them with minimal delay
       
       // Show both cards briefly, then hide them with minimal delay
       setTimeout(() => {
@@ -3633,7 +3640,7 @@ function handleMemoryTileClickClassic(idx) {
         
         // Redraw to show hidden cards
         drawMemoryGameClassic();
-      }, 200); // Reduced from 800ms to 200ms for faster gameplay
+      }, 250); // Changed from 200ms to 250ms for proper mismatch reveal timing
       
       // Lock briefly to prevent rapid clicking during card flip
       memoryGame.lock = true;
