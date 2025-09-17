@@ -99,3 +99,56 @@ canvas {
 .wallet-disconnect:hover {
   background: #ff5252;
 }
+
+/* Buy-in and Wager Modal Styles */
+#gameModeName {
+  color: #836EF9;
+  font-size: 18px;
+  margin: 10px 0;
+}
+
+#wagerInput {
+  width: 180px;
+  padding: 10px;
+  margin: 15px auto;
+  background: #333;
+  color: white;
+  border: 2px solid #836EF9;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+#wagerInput:focus {
+  outline: none;
+  border-color: #ff69b4;
+}
+
+/* Transaction status styles */
+.transaction-status {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: bold;
+  z-index: 2000;
+  max-width: 300px;
+}
+
+.transaction-status.success {
+  background: #4CAF50;
+}
+
+.transaction-status.error {
+  background: #f44336;
+}
+
+.transaction-status.info {
+  background: #2196F3;
+}
+
+.transaction-status.warning {
+  background: #ff9800;
+}
