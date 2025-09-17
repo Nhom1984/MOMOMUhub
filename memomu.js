@@ -161,6 +161,30 @@ let walletConnection = {
   providerType: null // 'metamask' or 'walletconnect'
 };
 
+// --- MONAD BLOCKCHAIN CONFIGURATION ---
+// Configuration for Monad Testnet pay-to-play functionality
+const MONAD_CONFIG = {
+  chainId: '0x91', // 145 in decimal - Monad Testnet chain ID
+  chainIdDecimal: 145,
+  rpcUrl: 'https://testnet-rpc.monad.xyz',
+  currency: 'MON',
+  explorerUrl: 'https://testnet-explorer.monad.xyz',
+  // UPDATE THIS ADDRESS AFTER DEPLOYING THE CONTRACT
+  contractAddress: '0x1234567890123456789012345678901234567890', // Placeholder - replace with actual deployed contract address
+  playFee: '0.01' // Cost to play any game mode in MON
+};
+
+// --- MONAD PAY-TO-PLAY STATE ---
+// Tracks payment status and blockchain interactions
+let monadPayToPlay = {
+  isSetupComplete: false, // Has user added Monad network to MetaMask?
+  balance: '0', // User's MON balance
+  hasPaid: false, // Has user paid for current game session?
+  contract: null, // ethers.js contract instance
+  provider: null, // ethers.js provider
+  isChecking: false // Prevents multiple concurrent balance checks
+};
+
 // --- LEADERBOARD STATE ---
 let leaderboard = {
   currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu, monluck, battle
@@ -786,6 +810,17 @@ async function connectMetaMask() {
       window.ethereum.on('disconnect', handleWalletDisconnect);
       
       closeWalletModal();
+      
+      // After successful connection, prompt user to add Monad Testnet
+      setTimeout(async () => {
+        const addNetwork = confirm('Would you like to add Monad Testnet to MetaMask for pay-to-play games?\n\nThis allows you to pay with MON tokens to unlock game sessions.');
+        if (addNetwork) {
+          await addMonadNetwork();
+          // Check balance after adding network
+          await checkMonBalance();
+        }
+      }, 500); // Small delay to let wallet modal close
+      
       return true;
     }
     return false;
@@ -866,6 +901,302 @@ function getShortAddress(address) {
   return address.slice(0, 6) + '...' + address.slice(-4);
 }
 
+// --- MONAD BLOCKCHAIN FUNCTIONS ---
+// Functions for Monad Testnet integration and pay-to-play functionality
+
+/**
+ * Prompts user to add Monad Testnet to MetaMask
+ * This function helps users set up the Monad network in their MetaMask wallet
+ */
+async function addMonadNetwork() {
+  if (!window.ethereum) {
+    alert('MetaMask is required for Monad integration. Please install MetaMask first.');
+    return false;
+  }
+
+  try {
+    // Add Monad Testnet to MetaMask
+    await window.ethereum.request({
+      method: 'wallet_addEthereumChain',
+      params: [{
+        chainId: MONAD_CONFIG.chainId,
+        chainName: 'Monad Testnet',
+        nativeCurrency: {
+          name: 'MON',
+          symbol: 'MON',
+          decimals: 18
+        },
+        rpcUrls: [MONAD_CONFIG.rpcUrl],
+        blockExplorerUrls: [MONAD_CONFIG.explorerUrl]
+      }]
+    });
+
+    monadPayToPlay.isSetupComplete = true;
+    console.log('Monad Testnet added to MetaMask successfully');
+    return true;
+  } catch (error) {
+    console.error('Error adding Monad network:', error);
+    if (error.code === 4001) {
+      alert('You declined to add Monad Testnet. You can add it manually in MetaMask settings.');
+    } else {
+      alert('Error adding Monad Testnet to MetaMask. Please add it manually.');
+    }
+    return false;
+  }
+}
+
+/**
+ * Switches MetaMask to Monad Testnet if not already connected
+ * Ensures user is on the correct network for pay-to-play
+ */
+async function switchToMonadNetwork() {
+  if (!window.ethereum) return false;
+
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: MONAD_CONFIG.chainId }]
+    });
+    return true;
+  } catch (error) {
+    if (error.code === 4902) {
+      // Network not added yet, try to add it
+      return await addMonadNetwork();
+    } else {
+      console.error('Error switching to Monad network:', error);
+      return false;
+    }
+  }
+}
+
+/**
+ * Checks user's MON token balance on Monad Testnet
+ * Updates the monadPayToPlay.balance state
+ */
+async function checkMonBalance() {
+  if (!walletConnection.isConnected || !window.ethereum) {
+    monadPayToPlay.balance = '0';
+    return '0';
+  }
+
+  // Prevent multiple concurrent balance checks
+  if (monadPayToPlay.isChecking) return monadPayToPlay.balance;
+  monadPayToPlay.isChecking = true;
+
+  try {
+    // Create ethers provider for Monad network
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const network = await provider.getNetwork();
+    
+    // Check if we're on Monad Testnet
+    if (network.chainId !== MONAD_CONFIG.chainIdDecimal) {
+      console.log('Not on Monad network, switching...');
+      const switched = await switchToMonadNetwork();
+      if (!switched) {
+        monadPayToPlay.balance = '0';
+        monadPayToPlay.isChecking = false;
+        return '0';
+      }
+      // Recreate provider after network switch
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for network switch
+    }
+
+    // Get balance from the blockchain
+    const balance = await provider.getBalance(walletConnection.address);
+    const balanceInMon = ethers.utils.formatEther(balance);
+    monadPayToPlay.balance = balanceInMon;
+    
+    console.log(`MON Balance: ${balanceInMon} MON`);
+    monadPayToPlay.isChecking = false;
+    return balanceInMon;
+  } catch (error) {
+    console.error('Error checking MON balance:', error);
+    monadPayToPlay.balance = '0';
+    monadPayToPlay.isChecking = false;
+    return '0';
+  }
+}
+
+/**
+ * Initializes the pay-to-play smart contract
+ * Sets up ethers.js contract instance for blockchain interactions
+ */
+async function initializePayToPlayContract() {
+  if (!walletConnection.isConnected || !window.ethereum) {
+    console.warn('Wallet not connected, cannot initialize contract');
+    return false;
+  }
+
+  try {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+    
+    // Simple ABI for the payToPlay function - only includes what we need
+    const contractABI = [
+      "function payToPlay() external payable",
+      "function getPlayerPayments(address player) external view returns (uint256)",
+      "function getPlayerGameCount(address player) external view returns (uint256)",
+      "event PaymentReceived(address indexed player, uint256 amount, uint256 timestamp)"
+    ];
+
+    // Create contract instance
+    monadPayToPlay.contract = new ethers.Contract(
+      MONAD_CONFIG.contractAddress,
+      contractABI,
+      signer
+    );
+    
+    monadPayToPlay.provider = provider;
+    console.log('Pay-to-play contract initialized');
+    return true;
+  } catch (error) {
+    console.error('Error initializing contract:', error);
+    return false;
+  }
+}
+
+/**
+ * Processes payment for pay-to-play functionality
+ * Requires user to pay 0.01 MON to unlock game session
+ */
+async function processPayToPlay() {
+  // First check if wallet is connected
+  if (!walletConnection.isConnected) {
+    alert('Please connect your MetaMask wallet first to play games with MON tokens.');
+    connectWallet();
+    return false;
+  }
+
+  // Check MON balance
+  const balance = await checkMonBalance();
+  const balanceFloat = parseFloat(balance);
+  const requiredFee = parseFloat(MONAD_CONFIG.playFee);
+
+  if (balanceFloat < requiredFee) {
+    alert(`Insufficient MON balance! You need at least ${MONAD_CONFIG.playFee} MON to play.\n\nYour balance: ${balance} MON\nRequired: ${MONAD_CONFIG.playFee} MON\n\nPlease get MON tokens from the Monad Testnet faucet.`);
+    return false;
+  }
+
+  // Initialize contract if not already done
+  if (!monadPayToPlay.contract) {
+    const initialized = await initializePayToPlayContract();
+    if (!initialized) {
+      alert('Error connecting to pay-to-play contract. Please try again.');
+      return false;
+    }
+  }
+
+  try {
+    // Show user confirmation before payment
+    const confirmed = confirm(`Pay ${MONAD_CONFIG.playFee} MON to play this game?\n\nThis payment allows you to play one game session.\nTransaction will be processed on Monad Testnet.`);
+    
+    if (!confirmed) {
+      return false;
+    }
+
+    // Process payment through smart contract
+    console.log('Processing payment to smart contract...');
+    const tx = await monadPayToPlay.contract.payToPlay({
+      value: ethers.utils.parseEther(MONAD_CONFIG.playFee)
+    });
+
+    // Show transaction pending message
+    alert(`Payment transaction submitted! Transaction hash: ${tx.hash}\n\nPlease wait for confirmation...`);
+
+    // Wait for transaction confirmation
+    console.log('Waiting for transaction confirmation...');
+    const receipt = await tx.wait();
+    
+    if (receipt.status === 1) {
+      // Payment successful
+      monadPayToPlay.hasPaid = true;
+      alert(`Payment successful! You can now play the game.\n\nTransaction confirmed in block ${receipt.blockNumber}`);
+      console.log('Payment confirmed:', receipt);
+      return true;
+    } else {
+      alert('Payment transaction failed. Please try again.');
+      return false;
+    }
+
+  } catch (error) {
+    console.error('Payment error:', error);
+    
+    // Handle common error cases with user-friendly messages
+    if (error.code === 4001) {
+      alert('Payment cancelled by user.');
+    } else if (error.message && error.message.includes('insufficient funds')) {
+      alert('Insufficient MON balance for transaction fee. Please get more MON tokens.');
+    } else if (error.message && error.message.includes('user rejected')) {
+      alert('Transaction rejected by user.');
+    } else {
+      alert(`Payment failed: ${error.message || 'Unknown error'}\n\nPlease try again or check your wallet connection.`);
+    }
+    return false;
+  }
+}
+
+/**
+ * Checks if user has paid for the current game session
+ * This function can be called before starting any game mode
+ */
+async function checkPaymentStatus() {
+  // For testing purposes, if user is not connected to wallet, let them play for free
+  if (!walletConnection.isConnected) {
+    console.log('Wallet not connected - allowing free play');
+    return true;
+  }
+
+  // If user has already paid in this session, allow play
+  if (monadPayToPlay.hasPaid) {
+    console.log('Payment already completed for this session');
+    return true;
+  }
+
+  // Require payment for connected wallets
+  console.log('Payment required for connected wallet');
+  return false;
+}
+
+/**
+ * Resets payment status (call when user wants to play another game)
+ * In this implementation, payment is per-game-session, so we reset after each game
+ */
+function resetPaymentStatus() {
+  monadPayToPlay.hasPaid = false;
+  console.log('Payment status reset - new payment required for next game');
+}
+
+/**
+ * Main function to check payment and initiate payment flow if needed
+ * This should be called before starting any game mode
+ * @param {string} gameMode - The game mode being started (for logging/tracking)
+ * @returns {boolean} True if payment successful or not required, false if payment failed
+ */
+async function requirePaymentForGame(gameMode) {
+  console.log(`Payment check for ${gameMode}...`);
+  
+  // Check if payment is already completed
+  const hasAccess = await checkPaymentStatus();
+  if (hasAccess) {
+    return true;
+  }
+
+  // Payment required - start payment flow
+  console.log(`Starting payment flow for ${gameMode}`);
+  const paymentSuccess = await processPayToPlay();
+  
+  return paymentSuccess;
+}
+
+/**
+ * Refreshes MON balance display (can be called periodically)
+ */
+async function refreshMonBalance() {
+  if (walletConnection.isConnected) {
+    await checkMonBalance();
+  }
+}
+
 // --- TEST FUNCTION FOR WALLET INTEGRATION ---
 function testWalletIntegration() {
   // Simulate wallet connection for testing
@@ -887,6 +1218,10 @@ function testWalletIntegration() {
 
 // --- GAME OVER OVERLAY FUNCTIONS ---
 function showGameOverOverlay(mode, finalScore) {
+  // Reset payment status since game session has ended
+  // This ensures player needs to pay again for next game
+  resetPaymentStatus();
+  
   // Check if this is a leaderboard mode and if score qualifies for top 10
   const leaderboardModes = ["musicMemory", "memoryClassic", "memoryMemomu"];
   
@@ -2300,15 +2635,35 @@ function drawMenu() {
   ctx.textAlign = "center";
   menuButtons.forEach(b => b.draw());
   
-  // Draw wallet connection status
+  // Draw wallet connection status and MON balance
   ctx.font = "16px Arial";
-  ctx.fillStyle = walletConnection.isConnected ? "#00ff00" : "#999";
   ctx.textAlign = "right";
+  
   if (walletConnection.isConnected) {
+    // Show wallet info
+    ctx.fillStyle = "#00ff00";
     const providerIcon = walletConnection.providerType === 'metamask' ? '🦊' : '🔗';
-    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 45);
+    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 65);
+    
+    // Show MON balance if available
+    if (monadPayToPlay.balance !== '0') {
+      ctx.fillStyle = "#FFD700"; // Gold color for MON balance
+      ctx.fillText(`MON: ${parseFloat(monadPayToPlay.balance).toFixed(4)}`, WIDTH - 35, HEIGHT - 45);
+    } else {
+      ctx.fillStyle = "#ff6b6b"; // Red color for no balance
+      ctx.fillText("MON: 0.0000 (Need tokens for games)", WIDTH - 35, HEIGHT - 45);
+    }
+    
+    // Show payment status if game session is active
+    if (monadPayToPlay.hasPaid) {
+      ctx.fillStyle = "#00ff00"; // Green for paid
+      ctx.fillText("✓ Paid for this session", WIDTH - 35, HEIGHT - 25);
+    }
   } else {
-    ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
+    ctx.fillStyle = "#999";
+    ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 65);
+    ctx.fillStyle = "#FFA500"; // Orange for info
+    ctx.fillText("Connect wallet for pay-to-play games", WIDTH - 35, HEIGHT - 45);
   }
   
   ctx.fillStyle = "#fff";
@@ -3279,21 +3634,58 @@ canvas.addEventListener("click", function (e) {
       gameState = "memory_menu";
     }
     else if (modeButtons[2].isInside(mx, my)) {
-      // Entering MONLUCK mode - pause background music
+      // Entering MONLUCK mode - pause background music and check payment
       let music = assets.sounds["music"];
       if (music) {
         music.pause();
         music.currentTime = 0;
       }
-      gameState = "monluck"; startMonluckGame();
+      
+      // Check pay-to-play requirement before starting MONLUCK
+      requirePaymentForGame('MONLUCK').then(canPlay => {
+        if (canPlay) {
+          gameState = "monluck"; 
+          startMonluckGame();
+        } else {
+          // Payment failed or cancelled - restore music and stay on mode menu
+          if (soundOn && music) {
+            music.play();
+          }
+          console.log('MONLUCK game start cancelled - payment required');
+        }
+      }).catch(error => {
+        console.error('Error in payment flow for MONLUCK:', error);
+        if (soundOn && music) {
+          music.play();
+        }
+      });
     }
     else if (modeButtons[3].isInside(mx, my)) {
+      // Entering BATTLE mode - pause background music and check payment
       let music = assets.sounds["music"];
       if (music) {
         music.pause();
         music.currentTime = 0;
       }
-      gameState = "battle"; resetBattleGame();
+      
+      // Check pay-to-play requirement before starting BATTLE
+      requirePaymentForGame('BATTLE').then(canPlay => {
+        if (canPlay) {
+          gameState = "battle"; 
+          resetBattleGame();
+        } else {
+          // Payment failed or cancelled - restore music and stay on mode menu
+          if (soundOn && music) {
+            music.play();
+          }
+          console.log('BATTLE game start cancelled - payment required');
+        }
+      }).catch(error => {
+        console.error('Error in payment flow for BATTLE:', error);
+        if (soundOn && music) {
+          music.play();
+        }
+      });
     }
     else if (modeButtons[4].isInside(mx, my)) {
       gameState = "monomnibus";
@@ -3312,8 +3704,28 @@ canvas.addEventListener("click", function (e) {
     else if (modeButtons[7].isInside(mx, my)) { gameState = "menu"; }
   } else if (gameState === "musicmem_rules") {
     if (musicMemRulesButtons[0].isInside(mx, my)) {
-      gameState = "musicmem";
-      startMusicMemoryGame();
+      // Check pay-to-play requirement before starting Music Memory
+      requirePaymentForGame('MUSIC_MEMORY').then(canPlay => {
+        if (canPlay) {
+          gameState = "musicmem";
+          startMusicMemoryGame();
+        } else {
+          // Payment failed - return to mode menu
+          gameState = "mode";
+          let music = assets.sounds["music"];
+          if (soundOn && music) {
+            music.play();
+          }
+          console.log('Music Memory game start cancelled - payment required');
+        }
+      }).catch(error => {
+        console.error('Error in payment flow for Music Memory:', error);
+        gameState = "mode";
+        let music = assets.sounds["music"];
+        if (soundOn && music) {
+          music.play();
+        }
+      });
     }
     else if (musicMemRulesButtons[1].isInside(mx, my)) {
       gameState = "mode";
@@ -3353,8 +3765,31 @@ canvas.addEventListener("click", function (e) {
       }
     }
   } else if (gameState === "memory_menu") {
-    if (memoryMenuButtons[0].isInside(mx, my)) { gameState = "memory_classic_rules"; startMemoryGameClassic(); }
-    else if (memoryMenuButtons[1].isInside(mx, my)) { gameState = "memory_memomu_rules"; }
+    if (memoryMenuButtons[0].isInside(mx, my)) {
+      // Check pay-to-play requirement before starting Memory Classic
+      requirePaymentForGame('MEMORY_CLASSIC').then(canPlay => {
+        if (canPlay) {
+          gameState = "memory_classic_rules"; 
+          startMemoryGameClassic();
+        } else {
+          console.log('Memory Classic game start cancelled - payment required');
+        }
+      }).catch(error => {
+        console.error('Error in payment flow for Memory Classic:', error);
+      });
+    }
+    else if (memoryMenuButtons[1].isInside(mx, my)) {
+      // Check pay-to-play requirement before starting Memory Memomu
+      requirePaymentForGame('MEMORY_MEMOMU').then(canPlay => {
+        if (canPlay) {
+          gameState = "memory_memomu_rules";
+        } else {
+          console.log('Memory Memomu game start cancelled - payment required');
+        }
+      }).catch(error => {
+        console.error('Error in payment flow for Memory Memomu:', error);
+      });
+    }
     else if (memoryMenuButtons[2].isInside(mx, my)) { 
       gameState = "mode";
       // Restore background music when returning to mode menu
@@ -4072,10 +4507,24 @@ function draw() {
   updateUserFeedback();
   drawUserFeedback();
 }
+// --- BALANCE REFRESH TIMER ---
+let lastBalanceCheck = 0;
+const BALANCE_CHECK_INTERVAL = 30000; // Check balance every 30 seconds
+
 // --- GAME LOOP ---
 function gameLoop() {
   draw();
   tickSplash();
+  
+  // Periodically refresh MON balance if wallet is connected
+  const now = Date.now();
+  if (walletConnection.isConnected && now - lastBalanceCheck > BALANCE_CHECK_INTERVAL) {
+    lastBalanceCheck = now;
+    refreshMonBalance().catch(error => {
+      console.warn('Error refreshing balance:', error);
+    });
+  }
+  
   requestAnimationFrame(gameLoop);
 }
 
