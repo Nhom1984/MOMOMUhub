@@ -7,6 +7,24 @@
 // Import online leaderboard functions
 import { saveScore, getHighScores } from './leaderboard.js';
 
+// Import blockchain functions
+import { 
+  initBlockchain, 
+  connectBlockchain, 
+  placeBuyIn, 
+  playMonluck, 
+  enterBattle,
+  claimWeeklyReward,
+  claimBattleReward,
+  checkRewardEligibility,
+  checkBattleRewardEligibility,
+  getCurrentWeekId,
+  formatMON,
+  GAME_MODES,
+  BUY_IN_AMOUNTS,
+  blockchainState
+} from './blockchain.js';
+
 // Set canvas size to fixed 800x700
 window.addEventListener('DOMContentLoaded', function () {
   const canvas = document.getElementById('gameCanvas');
@@ -45,6 +63,7 @@ function loadSound(name, src) {
 // --- FILES TO LOAD ---
 const imageFiles = [
   { name: "memomu", src: "assets/MEMOMU1.png" },
+  { name: "memomubg", src: "assets/memomu.png" }, // Background for homepage
   { name: "monad", src: "assets/monad.png" },
   { name: "sound", src: "assets/sound.png" },
 ];
@@ -159,6 +178,16 @@ let walletConnection = {
   address: null,
   provider: null,
   providerType: null // 'metamask' or 'walletconnect'
+};
+
+// --- BLOCKCHAIN GAME STATE ---
+let blockchainGame = {
+  mode: 'free', // 'free' or 'paid'
+  selectedGameMode: null, // For buy-in selection
+  selectedBuyIn: null,    // Selected buy-in amount
+  selectedWager: 0.1,     // MONLUCK wager
+  pendingTransaction: false,
+  currentWeekId: 0
 };
 
 // --- LEADERBOARD STATE ---
@@ -725,6 +754,350 @@ function closeWalletModal() {
   }
 }
 
+// --- BLOCKCHAIN MODAL FUNCTIONS ---
+
+/**
+ * Show buy-in selection modal for memory games
+ */
+function showBuyInModal(gameMode) {
+  if (blockchainGame.mode !== 'paid') {
+    // Free mode - start game directly
+    startGameMode(gameMode);
+    return;
+  }
+  
+  blockchainGame.selectedGameMode = gameMode;
+  const modal = document.getElementById('buyInModal');
+  const gameModeName = document.getElementById('gameModeName');
+  
+  let modeName = 'Memory Game';
+  switch(gameMode) {
+    case 'MUSIC_MEMORY': modeName = 'Music Memory'; break;
+    case 'CLASSIC_MEMORY': modeName = 'Classic Memory'; break;
+    case 'MEMOMOMU': modeName = 'MEMOMOMU Memory'; break;
+  }
+  
+  gameModeName.textContent = modeName;
+  modal.style.display = 'flex';
+}
+
+/**
+ * Close buy-in selection modal
+ */
+function closeBuyInModal() {
+  const modal = document.getElementById('buyInModal');
+  modal.style.display = 'none';
+  blockchainGame.selectedGameMode = null;
+}
+
+/**
+ * Handle buy-in selection
+ */
+async function selectBuyIn(amount) {
+  closeBuyInModal();
+  
+  if (!walletConnection.isConnected) {
+    alert("Please connect your wallet first!");
+    return;
+  }
+  
+  blockchainGame.selectedBuyIn = parseFloat(amount);
+  blockchainGame.pendingTransaction = true;
+  
+  showTransactionStatus("Placing buy-in...", "info");
+  
+  try {
+    // Initialize blockchain if needed
+    await initBlockchain();
+    await connectBlockchain();
+    
+    // Place buy-in
+    const result = await placeBuyIn(blockchainGame.selectedGameMode, blockchainGame.selectedBuyIn);
+    
+    if (result.success) {
+      showTransactionStatus(`Buy-in successful! Starting ${blockchainGame.selectedGameMode}`, "success");
+      startGameMode(blockchainGame.selectedGameMode);
+    } else {
+      showTransactionStatus(`Buy-in failed: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error('Buy-in error:', error);
+    showTransactionStatus(`Buy-in failed: ${error.message}`, "error");
+  }
+  
+  blockchainGame.pendingTransaction = false;
+}
+
+/**
+ * Show MONLUCK wager modal
+ */
+function showWagerModal() {
+  if (blockchainGame.mode !== 'paid') {
+    // Free mode - start MONLUCK directly
+    gameState = "monluck"; 
+    startMonluckGame();
+    return;
+  }
+  
+  const modal = document.getElementById('wagerModal');
+  modal.style.display = 'flex';
+}
+
+/**
+ * Close wager modal
+ */
+function closeWagerModal() {
+  const modal = document.getElementById('wagerModal');
+  modal.style.display = 'none';
+}
+
+/**
+ * Confirm MONLUCK wager
+ */
+async function confirmWager() {
+  const wagerInput = document.getElementById('wagerInput');
+  const wager = parseFloat(wagerInput.value);
+  
+  if (wager < 0.1 || wager > 2.0) {
+    alert("Wager must be between 0.1 and 2 MON");
+    return;
+  }
+  
+  closeWagerModal();
+  
+  if (!walletConnection.isConnected) {
+    alert("Please connect your wallet first!");
+    return;
+  }
+  
+  blockchainGame.selectedWager = wager;
+  gameState = "monluck"; 
+  startMonluckGame();
+}
+
+/**
+ * Start a game mode (with buy-in already handled)
+ */
+function startGameMode(gameMode) {
+  let music = assets.sounds["music"];
+  if (music) {
+    music.pause();
+    music.currentTime = 0;
+  }
+  
+  switch(gameMode) {
+    case 'MUSIC_MEMORY':
+      gameState = "musicmem_rules";
+      break;
+    case 'CLASSIC_MEMORY':
+      gameState = "memory_menu";
+      break;
+    case 'MEMOMOMU':
+      gameState = "memory_menu";
+      break;
+  }
+}
+
+/**
+ * Show transaction status to user
+ */
+function showTransactionStatus(message, type = 'info') {
+  console.log(`[${type.toUpperCase()}] ${message}`);
+  
+  // Create status element
+  const statusEl = document.createElement('div');
+  statusEl.className = `transaction-status ${type}`;
+  statusEl.textContent = message;
+  document.body.appendChild(statusEl);
+  
+  // Remove after 5 seconds
+  setTimeout(() => {
+    if (statusEl.parentNode) {
+      statusEl.parentNode.removeChild(statusEl);
+    }
+  }, 5000);
+}
+
+/**
+ * Draw withdraw button for eligible players
+ */
+async function drawWithdrawButton() {
+  // Check if player is eligible for rewards in current week or previous weeks
+  try {
+    const currentWeek = await getCurrentWeekId();
+    let hasEligibleRewards = false;
+    
+    // Check current tab for eligibility
+    if (['musicMemory', 'memoryClassic', 'memoryMemomu'].includes(leaderboard.currentTab)) {
+      // Check both buy-in amounts for memory games
+      for (const buyIn of [0.1, 1.0]) {
+        const eligibility = await checkRewardEligibility(
+          leaderboard.currentTab.toUpperCase(), 
+          buyIn, 
+          currentWeek - 1, // Check previous week
+          walletConnection.address
+        );
+        if (eligibility.isEligible) {
+          hasEligibleRewards = true;
+          break;
+        }
+      }
+    } else if (leaderboard.currentTab === 'battle') {
+      const eligibility = await checkBattleRewardEligibility(
+        currentWeek - 1, 
+        walletConnection.address
+      );
+      if (eligibility.isEligible) {
+        hasEligibleRewards = true;
+      }
+    }
+    
+    if (hasEligibleRewards) {
+      // Draw withdraw button
+      ctx.fillStyle = "#4CAF50";
+      ctx.fillRect(WIDTH - 150, HEIGHT - 100, 130, 40);
+      ctx.strokeStyle = "#2E7D32";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(WIDTH - 150, HEIGHT - 100, 130, 40);
+      
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.fillText("WITHDRAW", WIDTH - 85, HEIGHT - 75);
+    }
+  } catch (error) {
+    console.warn('Error checking reward eligibility:', error);
+  }
+}
+
+/**
+ * Handle withdraw button click
+ */
+async function handleWithdrawClick() {
+  if (!walletConnection.isConnected) {
+    alert("Please connect your wallet first!");
+    return;
+  }
+  
+  if (blockchainGame.pendingTransaction) {
+    alert("Transaction in progress, please wait...");
+    return;
+  }
+  
+  blockchainGame.pendingTransaction = true;
+  showTransactionStatus("Checking eligible rewards...", "info");
+  
+  try {
+    await initBlockchain();
+    await connectBlockchain();
+    
+    const currentWeek = await getCurrentWeekId();
+    let claimed = false;
+    
+    // Try to claim rewards based on current tab
+    if (['musicMemory', 'memoryClassic', 'memoryMemomu'].includes(leaderboard.currentTab)) {
+      // Try both buy-in amounts for memory games
+      for (const buyIn of [0.1, 1.0]) {
+        const eligibility = await checkRewardEligibility(
+          leaderboard.currentTab.toUpperCase(), 
+          buyIn, 
+          currentWeek - 1,
+          walletConnection.address
+        );
+        
+        if (eligibility.isEligible) {
+          showTransactionStatus(`Claiming ${formatMON(eligibility.amount)} reward...`, "info");
+          
+          const result = await claimWeeklyReward(
+            leaderboard.currentTab.toUpperCase(), 
+            buyIn, 
+            currentWeek - 1
+          );
+          
+          if (result.success) {
+            showTransactionStatus(`Successfully claimed ${formatMON(result.amount)}!`, "success");
+            claimed = true;
+            break;
+          } else {
+            showTransactionStatus(`Claim failed: ${result.error}`, "error");
+          }
+        }
+      }
+    } else if (leaderboard.currentTab === 'battle') {
+      const eligibility = await checkBattleRewardEligibility(
+        currentWeek - 1, 
+        walletConnection.address
+      );
+      
+      if (eligibility.isEligible) {
+        showTransactionStatus(`Claiming ${formatMON(eligibility.amount)} battle reward...`, "info");
+        
+        const result = await claimBattleReward(currentWeek - 1);
+        
+        if (result.success) {
+          showTransactionStatus(`Successfully claimed ${formatMON(result.amount)}!`, "success");
+          claimed = true;
+        } else {
+          showTransactionStatus(`Battle claim failed: ${result.error}`, "error");
+        }
+      }
+    }
+    
+    if (!claimed) {
+      showTransactionStatus("No eligible rewards found for withdrawal", "warning");
+    }
+    
+  } catch (error) {
+    console.error('Withdraw error:', error);
+    showTransactionStatus(`Withdraw failed: ${error.message}`, "error");
+  }
+  
+  blockchainGame.pendingTransaction = false;
+}
+
+/**
+ * Handle battle mode entry
+ */
+async function handleBattleEntry() {
+  if (!walletConnection.isConnected) {
+    alert("Please connect your wallet first!");
+    return;
+  }
+  
+  if (blockchainGame.pendingTransaction) {
+    alert("Transaction in progress, please wait...");
+    return;
+  }
+  
+  blockchainGame.pendingTransaction = true;
+  showTransactionStatus("Entering battle mode...", "info");
+  
+  try {
+    await initBlockchain();
+    await connectBlockchain();
+    
+    const result = await enterBattle();
+    
+    if (result.success) {
+      showTransactionStatus("Battle entry successful!", "success");
+      let music = assets.sounds["music"];
+      if (music) {
+        music.pause();
+        music.currentTime = 0;
+      }
+      gameState = "battle"; 
+      resetBattleGame();
+    } else {
+      showTransactionStatus(`Battle entry failed: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error('Battle entry error:', error);
+    showTransactionStatus(`Battle entry failed: ${error.message}`, "error");
+  }
+  
+  blockchainGame.pendingTransaction = false;
+}
+
 // Make functions available globally for HTML onclick handlers
 window.connectMetaMask = connectMetaMask;
 window.connectWalletConnect = connectWalletConnect;
@@ -1265,6 +1638,11 @@ function drawLeaderboard() {
 
   // Draw back button
   leaderboardButtons[0].draw();
+  
+  // Draw withdraw button if user is connected and eligible
+  if (walletConnection.isConnected && blockchainGame.mode === 'paid') {
+    drawWithdrawButton();
+  }
 }
 
 function drawMonluckLeaderboard(data) {
@@ -1413,7 +1791,50 @@ function endMemoryMemomuGame() {
 }
 
 function endMonluckGame() {
+  // Handle blockchain payout for paid mode
+  if (blockchainGame.mode === 'paid' && walletConnection.isConnected && !blockchainGame.pendingTransaction) {
+    handleMonluckPayout();
+  }
+  
   showGameOverOverlay("monluck", monluckGame.score);
+}
+
+/**
+ * Handle MONLUCK blockchain payout
+ */
+async function handleMonluckPayout() {
+  const monadsFound = monluckGame.found.length;
+  
+  // Only pay out for 2+ monads (as per contract)
+  if (monadsFound < 2) {
+    showTransactionStatus("No payout - need at least 2 monads", "info");
+    return;
+  }
+  
+  blockchainGame.pendingTransaction = true;
+  showTransactionStatus(`Processing MONLUCK payout for ${monadsFound} monads...`, "info");
+  
+  try {
+    await initBlockchain();
+    await connectBlockchain();
+    
+    const result = await playMonluck(blockchainGame.selectedWager, monadsFound);
+    
+    if (result.success) {
+      if (result.payout > 0) {
+        showTransactionStatus(`🎉 MONLUCK WIN! Received ${formatMON(result.payout)}!`, "success");
+      } else {
+        showTransactionStatus("MONLUCK: Better luck next time!", "info");
+      }
+    } else {
+      showTransactionStatus(`MONLUCK payout failed: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error('MONLUCK payout error:', error);
+    showTransactionStatus(`MONLUCK payout error: ${error.message}`, "error");
+  }
+  
+  blockchainGame.pendingTransaction = false;
 }
 
 function endBattleGame() {
@@ -1424,10 +1845,11 @@ function endBattleGame() {
 function setupButtons() {
   // Main menu buttons - Wallet added above sound button
   menuButtons = [
-    new Button("NEW GAME", WIDTH / 2, 400, 240, 70),
-    new Button("WALLET", WIDTH - 100, 90, 180, 44),  // MetaMask integration
-    new Button("", WIDTH - 100, 40, 55, 44, "sound"),
-    new Button("LEADERBOARD", WIDTH / 2, 480, 240, 70),
+    new Button("🚀 PLAY ON MONAD", WIDTH / 2, 250, 300, 80),      // Paid mode with wallet, leaderboard, buy-in
+    new Button("🎮 PLAY FREE", WIDTH / 2, 350, 300, 80),         // Free mode, no wallet, no rewards
+    new Button("WALLET", WIDTH - 100, 90, 180, 44),              // Wallet connection
+    new Button("", WIDTH - 100, 40, 55, 44, "sound"),            // Sound toggle
+    new Button("LEADERBOARD", WIDTH / 2, 450, 240, 70),          // Leaderboard
   ];
   // Mode selection buttons - Wallet added above sound button
   let modeY = 295 + 85;
@@ -2293,11 +2715,32 @@ function nextBattleRoundOrEnd() {
 // --- DRAW FUNCTIONS ---
 function drawMenu() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
-  let img = assets.images["memomu"];
-  if (img) ctx.drawImage(img, WIDTH / 2 - 275, 50, 550, 275);
+  
+  // Draw memomu.png background
+  let bgImg = assets.images["memomubg"];
+  if (bgImg) {
+    ctx.drawImage(bgImg, 0, 0, WIDTH, HEIGHT);
+  } else {
+    // Fallback gradient background
+    let gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(1, "#16213e");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+  
+  // Main title
   ctx.fillStyle = "#ff69b4";
   ctx.font = "48px Arial";
   ctx.textAlign = "center";
+  ctx.fillText("MEMOMU HUB", WIDTH / 2, 100);
+  
+  // Subtitle
+  ctx.fillStyle = "#836EF9";
+  ctx.font = "24px Arial";
+  ctx.fillText("Play-to-Earn Memory Games on Monad", WIDTH / 2, 140);
+  
+  // Draw main buttons
   menuButtons.forEach(b => b.draw());
   
   // Draw wallet connection status
@@ -3244,56 +3687,98 @@ canvas.addEventListener("click", function (e) {
   }
 
   if (gameState === "menu") {
-    if (menuButtons[0].isInside(mx, my)) { gameState = "mode"; }
-    else if (menuButtons[1].isInside(mx, my)) {
+    if (menuButtons[0].isInside(mx, my)) { 
+      // Play on MONAD - requires wallet connection
+      if (!walletConnection.isConnected) {
+        alert("Please connect your wallet first to play on MONAD!");
+        connectWallet();
+        return;
+      }
+      blockchainGame.mode = 'paid';
+      gameState = "mode"; 
+    }
+    else if (menuButtons[1].isInside(mx, my)) { 
+      // Play FREE - no wallet required
+      blockchainGame.mode = 'free';
+      gameState = "mode"; 
+    }
+    else if (menuButtons[2].isInside(mx, my)) {
       // Connect Wallet button - always open modal for wallet management
       connectWallet();
     }
-    else if (menuButtons[2].isInside(mx, my)) {
+    else if (menuButtons[3].isInside(mx, my)) {
       soundOn = !soundOn;
-      menuButtons[2].label = soundOn ? "SOUND ON" : "SOUND OFF";
+      menuButtons[3].label = soundOn ? "SOUND ON" : "SOUND OFF";
       let music = assets.sounds["music"];
       if (soundOn && music) music.play();
       else if (music) music.pause();
     }
-    else if (menuButtons[3].isInside(mx, my)) { 
+    else if (menuButtons[4].isInside(mx, my)) { 
       gameState = "leaderboard"; 
       // Fetch online scores for current tab when leaderboard is opened
       fetchOnlineScores(leaderboard.currentTab);
     }
   } else if (gameState === "mode") {
     if (modeButtons[0].isInside(mx, my)) {
-      let music = assets.sounds["music"];
-      if (music) {
-        music.pause();
-        music.currentTime = 0;
+      // Music Memory
+      if (blockchainGame.mode === 'paid') {
+        showBuyInModal('MUSIC_MEMORY');
+      } else {
+        let music = assets.sounds["music"];
+        if (music) {
+          music.pause();
+          music.currentTime = 0;
+        }
+        gameState = "musicmem_rules";
       }
-      gameState = "musicmem_rules";
     }
     else if (modeButtons[1].isInside(mx, my)) {
-      let music = assets.sounds["music"];
-      if (music) {
-        music.pause();
-        music.currentTime = 0;
+      // Memory games menu
+      if (blockchainGame.mode === 'paid') {
+        // Show submenu for Classic/MEMOMU selection with buy-ins
+        let music = assets.sounds["music"];
+        if (music) {
+          music.pause();
+          music.currentTime = 0;
+        }
+        gameState = "memory_menu";
+      } else {
+        let music = assets.sounds["music"];
+        if (music) {
+          music.pause();
+          music.currentTime = 0;
+        }
+        gameState = "memory_menu";
       }
-      gameState = "memory_menu";
     }
     else if (modeButtons[2].isInside(mx, my)) {
-      // Entering MONLUCK mode - pause background music
-      let music = assets.sounds["music"];
-      if (music) {
-        music.pause();
-        music.currentTime = 0;
+      // MONLUCK
+      if (blockchainGame.mode === 'paid') {
+        showWagerModal();
+      } else {
+        let music = assets.sounds["music"];
+        if (music) {
+          music.pause();
+          music.currentTime = 0;
+        }
+        gameState = "monluck"; 
+        startMonluckGame();
       }
-      gameState = "monluck"; startMonluckGame();
     }
     else if (modeButtons[3].isInside(mx, my)) {
-      let music = assets.sounds["music"];
-      if (music) {
-        music.pause();
-        music.currentTime = 0;
+      // Battle mode
+      if (blockchainGame.mode === 'paid') {
+        // Battle mode requires 1 MON entry fee
+        handleBattleEntry();
+      } else {
+        let music = assets.sounds["music"];
+        if (music) {
+          music.pause();
+          music.currentTime = 0;
+        }
+        gameState = "battle"; 
+        resetBattleGame();
       }
-      gameState = "battle"; resetBattleGame();
     }
     else if (modeButtons[4].isInside(mx, my)) {
       gameState = "monomnibus";
@@ -3353,8 +3838,23 @@ canvas.addEventListener("click", function (e) {
       }
     }
   } else if (gameState === "memory_menu") {
-    if (memoryMenuButtons[0].isInside(mx, my)) { gameState = "memory_classic_rules"; startMemoryGameClassic(); }
-    else if (memoryMenuButtons[1].isInside(mx, my)) { gameState = "memory_memomu_rules"; }
+    if (memoryMenuButtons[0].isInside(mx, my)) { 
+      // Classic Memory
+      if (blockchainGame.mode === 'paid') {
+        showBuyInModal('CLASSIC_MEMORY');
+      } else {
+        gameState = "memory_classic_rules"; 
+        startMemoryGameClassic(); 
+      }
+    }
+    else if (memoryMenuButtons[1].isInside(mx, my)) { 
+      // MEMOMU Memory
+      if (blockchainGame.mode === 'paid') {
+        showBuyInModal('MEMOMOMU');
+      } else {
+        gameState = "memory_memomu_rules"; 
+      }
+    }
     else if (memoryMenuButtons[2].isInside(mx, my)) { 
       gameState = "mode";
       // Restore background music when returning to mode menu
@@ -3517,6 +4017,13 @@ canvas.addEventListener("click", function (e) {
       let music = assets.sounds["music"];
       if (soundOn && music) {
         music.play();
+      }
+    }
+    
+    // Handle withdraw button click (bottom right)
+    if (walletConnection.isConnected && blockchainGame.mode === 'paid') {
+      if (mx >= WIDTH - 150 && mx <= WIDTH - 20 && my >= HEIGHT - 100 && my <= HEIGHT - 60) {
+        handleWithdrawClick();
       }
     }
   } else if (gameState === "musicmem_post_score") {
