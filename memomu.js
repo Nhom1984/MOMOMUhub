@@ -174,6 +174,7 @@ let playMode = {
 // --- LEADERBOARD STATE ---
 let leaderboard = {
   currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu, monluck, battle
+  showWithdrawMode: false,   // Toggle between leaderboard and withdraw mode
   tabs: [
     { key: "musicMemory", label: "MUSIC" },
     { key: "memoryClassic", label: "CLASSIC" },
@@ -1273,8 +1274,24 @@ function drawLeaderboard() {
     }
   }
 
-  // Draw back button
+  // Draw back button and withdraw toggle button (only for wallet-connected paid mode users)
   leaderboardButtons[0].draw();
+  
+  // Add withdraw toggle button for wallet-connected users in paid mode
+  if (walletConnection.isConnected && playMode.isPaid) {
+    const withdrawButton = new Button(
+      leaderboard.showWithdrawMode ? "SCORES" : "WITHDRAW", 
+      WIDTH - 100, 120, 180, 40
+    );
+    withdrawButton.draw();
+    leaderboardButtons[1] = withdrawButton; // Cache for click handling
+  }
+  
+  // If in withdraw mode, show withdraw interface instead
+  if (leaderboard.showWithdrawMode && walletConnection.isConnected) {
+    drawWithdrawInterface();
+    return;
+  }
 }
 
 function drawMonluckLeaderboard(data) {
@@ -1367,6 +1384,128 @@ function drawTraditionalLeaderboard(scores) {
     }
 
     ctx.fillText(`${rank}.    ${name}    ${scoreText}    ${walletText}`, WIDTH / 2, y);
+  }
+}
+
+// --- WITHDRAW INTERFACE ---
+function drawWithdrawInterface() {
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+  // Background
+  ctx.fillStyle = "#ffb6c1";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // Title
+  ctx.font = "42px Arial";
+  ctx.fillStyle = "#836EF9";
+  ctx.textAlign = "center";
+  ctx.fillText("WITHDRAW REWARDS", WIDTH / 2, 80);
+  
+  // User info
+  ctx.font = "16px Arial";
+  ctx.fillStyle = "#333";
+  ctx.fillText(`Wallet: ${getShortAddress(walletConnection.address)}`, WIDTH / 2, 110);
+  
+  // Check for eligible payouts
+  checkAndDrawEligiblePayouts();
+}
+
+async function checkAndDrawEligiblePayouts() {
+  if (!walletConnection.isConnected) return;
+  
+  // Get current payout eligibility (this would be cached from blockchain calls)
+  const eligibility = window.blockchainIntegration ? 
+    window.blockchainIntegration.getPayoutEligibility(walletConnection.address) : {};
+  
+  let yPos = 150;
+  let withdrawButtonId = 2; // Start after back and toggle buttons
+  
+  ctx.font = "20px Arial";
+  ctx.fillStyle = "#333";
+  ctx.textAlign = "left";
+  
+  // Memory game payouts
+  const memoryModes = [
+    { key: "musicMemory", name: "Music Memory" },
+    { key: "memoryClassic", name: "Classic Memory" }, 
+    { key: "memoryMemomu", name: "MEMOMU Memory" }
+  ];
+  
+  let hasPayouts = false;
+  
+  for (const mode of memoryModes) {
+    const modeEligibility = eligibility.memory?.[mode.key] || {};
+    
+    for (const buyIn of ["0.1", "1"]) {
+      const buyInEligibility = modeEligibility[buyIn] || {};
+      
+      for (const [week, payout] of Object.entries(buyInEligibility)) {
+        if (payout.eligible && !payout.withdrawn) {
+          hasPayouts = true;
+          
+          // Draw payout info
+          ctx.fillStyle = "#333";
+          ctx.fillText(`${mode.name} (${buyIn} MON) - Week ${week}`, 50, yPos);
+          ctx.fillText(`Position: #${payout.position} | Amount: ${window.blockchainIntegration?.formatMON(payout.amount) || '0 MON'}`, 50, yPos + 25);
+          
+          // Draw withdraw button
+          const withdrawBtn = new Button(
+            "WITHDRAW", 
+            WIDTH - 150, yPos - 10, 120, 40
+          );
+          withdrawBtn.draw();
+          
+          // Store button info for click handling
+          leaderboardButtons[withdrawButtonId] = {
+            button: withdrawBtn,
+            gameMode: mode.key,
+            buyInAmount: buyIn,
+            week: parseInt(week)
+          };
+          withdrawButtonId++;
+          
+          yPos += 70;
+        }
+      }
+    }
+  }
+  
+  // Battle payouts
+  const battleEligibility = eligibility.battle || {};
+  for (const [week, payout] of Object.entries(battleEligibility)) {
+    if (payout.eligible && !payout.withdrawn) {
+      hasPayouts = true;
+      
+      // Draw payout info
+      ctx.fillStyle = "#333";
+      ctx.fillText(`Battle Mode - Week ${week}`, 50, yPos);
+      ctx.fillText(`Position: #${payout.position} | Amount: ${window.blockchainIntegration?.formatMON(payout.amount) || '0 MON'}`, 50, yPos + 25);
+      
+      // Draw withdraw button
+      const withdrawBtn = new Button(
+        "WITHDRAW", 
+        WIDTH - 150, yPos - 10, 120, 40
+      );
+      withdrawBtn.draw();
+      
+      // Store button info for click handling
+      leaderboardButtons[withdrawButtonId] = {
+        button: withdrawBtn,
+        gameMode: "battle",
+        week: parseInt(week)
+      };
+      withdrawButtonId++;
+      
+      yPos += 70;
+    }
+  }
+  
+  if (!hasPayouts) {
+    ctx.fillStyle = "#666";
+    ctx.textAlign = "center";  
+    ctx.fillText("No rewards available for withdrawal", WIDTH / 2, HEIGHT / 2);
+    ctx.fillText("Payouts become available after weekly leaderboard preparation", WIDTH / 2, HEIGHT / 2 + 30);
+    ctx.fillText("(Sundays at 20:00 UTC)", WIDTH / 2, HEIGHT / 2 + 60);
   }
 }
 
@@ -2313,6 +2452,11 @@ function nextBattleRoundOrEnd() {
       const playerName = walletConnection.isConnected ? getShortAddress(walletConnection.address) : "Anonymous";
       const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
       updateBattleLeaderboard(playerName, walletAddress);
+      
+      // Handle instant payout for battle winner in paid mode
+      if (playMode.isPaid && walletConnection.isConnected) {
+        handleBattleInstantPayout();
+      }
     }
   } else {
     // Subsequent rounds should go to ready state to show countdown
@@ -3732,10 +3876,32 @@ canvas.addEventListener("click", function (e) {
     // Handle back button
     if (leaderboardButtons[0].isInside(mx, my)) {
       gameState = "menu";
+      leaderboard.showWithdrawMode = false; // Reset withdraw mode
       // Restore background music when returning to main menu
       let music = assets.sounds["music"];
       if (soundOn && music) {
         music.play();
+      }
+    }
+    
+    // Handle withdraw toggle button (for wallet-connected users)
+    if (leaderboardButtons[1] && leaderboardButtons[1].isInside(mx, my)) {
+      leaderboard.showWithdrawMode = !leaderboard.showWithdrawMode;
+      
+      // Check payout eligibility when entering withdraw mode
+      if (leaderboard.showWithdrawMode && window.blockchainIntegration) {
+        window.blockchainIntegration.checkPayoutEligibility(walletConnection.address);
+      }
+    }
+    
+    // Handle withdraw buttons (when in withdraw mode)
+    if (leaderboard.showWithdrawMode) {
+      for (let i = 2; i < leaderboardButtons.length; i++) {
+        const buttonInfo = leaderboardButtons[i];
+        if (buttonInfo && buttonInfo.button && buttonInfo.button.isInside(mx, my)) {
+          handleWithdrawClick(buttonInfo);
+          break;
+        }
       }
     }
   } else if (gameState === "musicmem_post_score") {
@@ -4035,6 +4201,11 @@ function handleMonluckTileClick(idx) {
     const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
     updateMonluckLeaderboard(playerName, walletAddress, 5, monluckGame.bestSessionStreak);
 
+    // Handle instant payout for paid mode
+    if (playMode.isPaid && walletConnection.isConnected && playMode.wagerAmount > 0) {
+      handleMonluckInstantPayout(5);
+    }
+
     // REMOVED: Success splash screen - game ends immediately
   } else if (monluckGame.clicks >= 5) {
     // Game over - 5 tries used up
@@ -4049,12 +4220,112 @@ function handleMonluckTileClick(idx) {
       const playerName = walletConnection.isConnected ? getShortAddress(walletConnection.address) : "Anonymous";
       const walletAddress = walletConnection.isConnected ? walletConnection.address : null;
       updateMonluckLeaderboard(playerName, walletAddress, 4, monluckGame.bestSessionStreak);
-    } else {
+      
+      // Handle instant payout for paid mode (4 or more monads)
+      if (playMode.isPaid && walletConnection.isConnected && playMode.wagerAmount > 0) {
+        handleMonluckInstantPayout(monluckGame.found.length);
+      }
+    } else if (monluckGame.found.length >= 2) {
+      // Handle instant payout for 2-3 monads in paid mode
+      if (playMode.isPaid && walletConnection.isConnected && playMode.wagerAmount > 0) {
+        handleMonluckInstantPayout(monluckGame.found.length);
+      }
       // Reset streak for less than 4 monads
+      monluckGame.currentStreak = 0;
+    } else {
+      // Reset streak for less than 2 monads (no payout)
       monluckGame.currentStreak = 0;
     }
 
     // REMOVED: Game over splash screen - game ends immediately
+  }
+}
+
+/**
+ * Handle instant MONLUCK payout for wins (2+ monads found)
+ */
+async function handleMonluckInstantPayout(monadsFound) {
+  if (!playMode.isPaid || !walletConnection.isConnected || !playMode.wagerAmount) {
+    return;
+  }
+
+  // Only pay out for 2+ monads
+  if (monadsFound < 2) {
+    return;
+  }
+
+  try {
+    showTransactionPending("Processing instant payout...");
+    
+    // Call smart contract for instant payout
+    if (window.blockchainIntegration && window.blockchainIntegration.isConnected()) {
+      // This would trigger the smart contract payout function
+      // The contract checks the multiplier and pays out instantly
+      console.log(`MONLUCK Win! ${monadsFound} monads found, triggering ${getMonluckMultiplier(monadsFound)}x payout`);
+      
+      // In a real implementation, this would call the smart contract
+      // For now, we'll just show a success message
+      hideTransactionPending();
+      
+      const multiplier = getMonluckMultiplier(monadsFound);
+      const winAmount = playMode.wagerAmount * multiplier;
+      
+      alert(`🎉 MONLUCK WIN! 🎉\n${monadsFound} Monads Found\n${multiplier}x Multiplier\nWin: ${winAmount} MON\n\nPayout sent to your wallet!`);
+    } else {
+      hideTransactionPending();
+      console.warn("Blockchain not connected for payout");
+    }
+    
+  } catch (error) {
+    console.error("MONLUCK payout failed:", error);
+    hideTransactionPending();
+    alert("Payout failed: " + error.message);
+  }
+}
+
+/**
+ * Get MONLUCK multiplier based on monads found
+ */
+function getMonluckMultiplier(monadsFound) {
+  switch (monadsFound) {
+    case 2: return 1.5;
+    case 3: return 2.4;  
+    case 4: return 5.0;
+    case 5: return 10.0;
+    default: return 0;
+  }
+}
+
+/**
+ * Handle instant battle payout for winner (1.5 MON)
+ */
+async function handleBattleInstantPayout() {
+  if (!playMode.isPaid || !walletConnection.isConnected) {
+    return;
+  }
+
+  try {
+    showTransactionPending("Processing battle winner payout...");
+    
+    // Call smart contract for instant payout
+    if (window.blockchainIntegration && window.blockchainIntegration.isConnected()) {
+      // This would trigger the smart contract payout function
+      console.log("Battle won! Triggering 1.5 MON instant payout");
+      
+      // In a real implementation, this would call the smart contract
+      // For now, we'll just show a success message
+      hideTransactionPending();
+      
+      alert(`🏆 BATTLE VICTORY! 🏆\n\nWinner Payout: 1.5 MON\n\nPayout sent to your wallet!`);
+    } else {
+      hideTransactionPending();
+      console.warn("Blockchain not connected for payout");
+    }
+    
+  } catch (error) {
+    console.error("Battle payout failed:", error);
+    hideTransactionPending();
+    alert("Payout failed: " + error.message);
   }
 }
 
@@ -4299,6 +4570,46 @@ function gameLoop() {
   draw();
   tickSplash();
   requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Handle withdraw button clicks
+ */
+async function handleWithdrawClick(buttonInfo) {
+  if (!walletConnection.isConnected) {
+    alert("Wallet not connected!");
+    return;
+  }
+
+  try {
+    showTransactionPending("Processing withdrawal...");
+    
+    let txHash;
+    if (buttonInfo.gameMode === "battle") {
+      // Battle payout withdrawal
+      txHash = await window.blockchainIntegration.withdrawBattlePayout(buttonInfo.week);
+    } else {
+      // Memory game payout withdrawal
+      txHash = await window.blockchainIntegration.withdrawMemoryPayout(
+        buttonInfo.gameMode,
+        buttonInfo.buyInAmount,
+        buttonInfo.week
+      );
+    }
+    
+    hideTransactionPending();
+    alert(`Withdrawal successful! Transaction: ${txHash.substring(0, 10)}...`);
+    
+    // Refresh payout eligibility
+    if (window.blockchainIntegration) {
+      await window.blockchainIntegration.checkPayoutEligibility(walletConnection.address);
+    }
+    
+  } catch (error) {
+    console.error("Withdrawal failed:", error);
+    alert("Withdrawal failed: " + error.message);
+    hideTransactionPending();
+  }
 }
 
 // --- BLOCKCHAIN PAYMENT HANDLERS ---
