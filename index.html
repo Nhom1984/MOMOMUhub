@@ -32,8 +32,51 @@
       </button>
     </div>
   </div>
+
+  <!-- Buy-in Selection Modal -->
+  <div id="buyInModal" class="wallet-modal" style="display: none;">
+    <div class="wallet-modal-content">
+      <h2>Select Buy-in Amount</h2>
+      <div style="margin: 20px 0; color: #666; font-size: 14px;">
+        Choose your buy-in for this tournament
+      </div>
+      <button class="wallet-option" onclick="selectBuyIn('0.1')">
+        💎 0.1 MON
+      </button>
+      <button class="wallet-option" onclick="selectBuyIn('1.0')">
+        💎 1.0 MON
+      </button>
+      <button class="wallet-option wallet-close" onclick="closeBuyInModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- MONLUCK Wager Modal -->
+  <div id="wagerModal" class="wallet-modal" style="display: none;">
+    <div class="wallet-modal-content">
+      <h2>Select Your Wager</h2>
+      <div style="margin: 20px 0; color: #666; font-size: 14px;">
+        Choose your wager amount (0.1 - 2.0 MON)
+      </div>
+      <input type="range" id="wagerSlider" min="0.1" max="2.0" step="0.1" value="0.5" 
+             style="width: 100%; margin: 10px 0;">
+      <div id="wagerDisplay" style="font-size: 18px; margin: 10px 0;">0.5 MON</div>
+      <button class="wallet-option" onclick="confirmWager()">
+        🎲 Place Wager
+      </button>
+      <button class="wallet-option wallet-close" onclick="closeWagerModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Ethers.js CDN -->
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+  
   <script type="module" src="firebase.js"></script>
   <script type="module" src="leaderboard.js"></script>
+  <script src="blockchain.js"></script>
   <script type="module" src="memomu.js"></script>
 </body>
 
