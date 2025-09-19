@@ -448,6 +448,25 @@ function formatMON(amount) {
     return `${num.toFixed(3)} MON`;
 }
 
+/**
+ * Get wallet balance in MON
+ * @returns {Promise<string>} Balance in MON format
+ */
+async function getWalletBalance() {
+    if (!isBlockchainReady() || !blockchain.signer) {
+        return "0 MON";
+    }
+
+    try {
+        const balance = await blockchain.signer.getBalance();
+        const balanceInEth = ethers.utils.formatEther(balance);
+        return formatMON(balanceInEth);
+    } catch (error) {
+        console.error("Error getting wallet balance:", error);
+        return "0 MON";
+    }
+}
+
 // Initialize blockchain when wallet connects
 async function onWalletConnected() {
     if (walletConnection.isConnected) {
@@ -465,6 +484,7 @@ window.getPendingWithdrawal = getPendingWithdrawal;
 window.withdrawWinnings = withdrawWinnings;
 window.getTournamentInfo = getTournamentInfo;
 window.formatMON = formatMON;
+window.getWalletBalance = getWalletBalance;
 window.onWalletConnected = onWalletConnected;
 
 console.log("Blockchain integration loaded");
