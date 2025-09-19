@@ -797,6 +797,9 @@ function updateWagerDisplay() {
   }
 }
 
+// Make updateWagerDisplay globally available
+window.updateWagerDisplay = updateWagerDisplay;
+
 /**
  * Confirm wager and start MONLUCK
  */
@@ -852,8 +855,24 @@ function closeWalletModal() {
   }
 }
 
-// Make functions available globally for HTML onclick handlers
-window.connectMetaMask = connectMetaMask;
+/**
+ * Simulate wallet connection for testing (debug function)
+ * This allows testing MONAD mode features without actual wallet
+ */
+function simulateWalletConnection() {
+  walletConnection.isConnected = true;
+  walletConnection.address = "0x1234567890123456789012345678901234567890"; // Mock address
+  walletConnection.provider = { isMockProvider: true };
+  walletConnection.providerType = 'metamask';
+  walletConnection.balance = "10.500"; // Mock balance
+  
+  console.log("Simulated wallet connection for testing");
+  alert(`Simulated wallet connected: ${getShortAddress(walletConnection.address)}`);
+  return true;
+}
+
+// Make simulate function available globally for testing
+window.simulateWalletConnection = simulateWalletConnection;
 window.connectWalletConnect = connectWalletConnect;
 window.closeWalletModal = closeWalletModal;
 window.disconnectWallet = disconnectWallet;
@@ -998,6 +1017,7 @@ function handleWalletDisconnect() {
   walletConnection.address = null;
   walletConnection.provider = null;
   walletConnection.providerType = null;
+  walletConnection.balance = "0.000"; // Reset balance display
 }
 
 /**
