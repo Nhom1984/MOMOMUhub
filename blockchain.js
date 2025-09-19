@@ -437,6 +437,36 @@ function hideBlockchainLoading() {
 }
 
 /**
+ * Get user's wallet balance
+ * @returns {Promise<string>} Balance in MON format
+ */
+async function getUserBalance() {
+    if (!isBlockchainReady()) {
+        return "0.000";
+    }
+
+    try {
+        const balance = await blockchain.provider.getBalance(blockchain.userAddress);
+        const balanceInEth = ethers.utils.formatEther(balance);
+        const balanceNum = parseFloat(balanceInEth);
+        return balanceNum.toFixed(3);
+    } catch (error) {
+        console.error("Error fetching balance:", error);
+        return "0.000";
+    }
+}
+
+/**
+ * Update wallet balance display
+ * Call this periodically or after transactions
+ */
+async function updateWalletBalance() {
+    if (typeof walletConnection !== 'undefined' && walletConnection.isConnected) {
+        walletConnection.balance = await getUserBalance();
+    }
+}
+
+/**
  * Format MON amount for display
  * @param {string} amount - Amount in ETH
  * @returns {string} Formatted amount
@@ -466,5 +496,7 @@ window.withdrawWinnings = withdrawWinnings;
 window.getTournamentInfo = getTournamentInfo;
 window.formatMON = formatMON;
 window.onWalletConnected = onWalletConnected;
+window.getUserBalance = getUserBalance;
+window.updateWalletBalance = updateWalletBalance;
 
 console.log("Blockchain integration loaded");
