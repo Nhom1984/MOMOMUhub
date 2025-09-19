@@ -668,6 +668,52 @@ function drawUserFeedback() {
   ctx.restore();
 }
 
+// --- MON BALANCE DISPLAY ---
+let currentBalance = "0 MON";
+let balanceUpdateTimer = 0;
+
+/**
+ * Draw persistent MON balance display when wallet is connected
+ */
+function drawWalletBalance() {
+  // Only show balance when wallet is connected and not in loading/menu states
+  if (!walletConnection.isConnected || gameState === "loading" || gameState === "menu") {
+    return;
+  }
+
+  // Update balance every 10 seconds
+  balanceUpdateTimer--;
+  if (balanceUpdateTimer <= 0) {
+    updateWalletBalance();
+    balanceUpdateTimer = 600; // Reset timer (10 seconds at 60fps)
+  }
+
+  // Draw balance in top-right corner
+  ctx.save();
+  ctx.font = '16px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(WIDTH - 140, 10, 130, 30);
+  
+  ctx.fillStyle = '#fff';
+  ctx.fillText('💰 ' + currentBalance, WIDTH - 15, 30);
+  ctx.restore();
+}
+
+/**
+ * Update wallet balance from blockchain
+ */
+async function updateWalletBalance() {
+  if (walletConnection.isConnected && typeof getWalletBalance !== 'undefined') {
+    try {
+      currentBalance = await getWalletBalance();
+    } catch (error) {
+      console.error('Error updating wallet balance:', error);
+      currentBalance = "Error";
+    }
+  }
+}
+
 // --- ONLINE LEADERBOARD FUNCTIONS ---
 /**
  * Fetch online scores for a specific mode
@@ -740,7 +786,7 @@ async function selectBuyIn(amount) {
   if (currentGameModeForBuyIn && typeof handleWeeklyGameBuyIn !== 'undefined') {
     const success = await handleWeeklyGameBuyIn(currentGameModeForBuyIn, amount);
     if (success) {
-      // Proceed to game rules/start
+      // Proceed to game rules/start - Fixed: properly initialize games after buy-in
       switch(currentGameModeForBuyIn) {
         case 'musicMemory':
           gameState = "musicmem_rules";
@@ -802,7 +848,7 @@ async function confirmWager() {
   
   // For MONAD mode, this will be handled when the game ends
   gameState = "monluck";
-  resetMonluckGame();
+  startMonluckGame(); // Fixed: use startMonluckGame instead of missing resetMonluckGame
 }
 
 // Make functions globally available
@@ -3503,6 +3549,10 @@ canvas.addEventListener("click", function (e) {
       
       if (playMode === "monad") {
         // For battle mode, handle buy-in directly
+        if (!walletConnection.isConnected) {
+          alert("Please connect your wallet first to play Battle mode with MONAD.");
+          return;
+        }
         if (typeof handleBattleEntry !== 'undefined') {
           handleBattleEntry().then(success => {
             if (success) {
@@ -4330,6 +4380,9 @@ function draw() {
   // Update and draw user feedback
   updateUserFeedback();
   drawUserFeedback();
+  
+  // Draw wallet balance if connected (persistent across all game screens)
+  drawWalletBalance();
 }
 // --- GAME LOOP ---
 function gameLoop() {
