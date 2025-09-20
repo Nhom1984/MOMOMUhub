@@ -159,7 +159,8 @@ let walletConnection = {
   isConnected: false,
   address: null,
   provider: null,
-  providerType: null // 'metamask' or 'walletconnect'
+  providerType: null, // 'metamask' or 'walletconnect'
+  balance: "0.000" // MON balance as string for display
 };
 
 // --- LEADERBOARD STATE ---
@@ -740,7 +741,7 @@ async function selectBuyIn(amount) {
   if (currentGameModeForBuyIn && typeof handleWeeklyGameBuyIn !== 'undefined') {
     const success = await handleWeeklyGameBuyIn(currentGameModeForBuyIn, amount);
     if (success) {
-      // Proceed to game rules/start
+      // Proceed directly to game start (no return to menu as requested)
       switch(currentGameModeForBuyIn) {
         case 'musicMemory':
           gameState = "musicmem_rules";
@@ -753,7 +754,12 @@ async function selectBuyIn(amount) {
           gameState = "memory_memomu_rules";
           break;
       }
+    } else {
+      // Transaction failed - show clear error message
+      alert("Transaction failed. Please check your wallet balance and try again.");
     }
+  } else {
+    alert("Blockchain not ready. Please connect your wallet and try again.");
   }
   currentGameModeForBuyIn = null;
 }
@@ -791,6 +797,9 @@ function updateWagerDisplay() {
   }
 }
 
+// Make updateWagerDisplay globally available
+window.updateWagerDisplay = updateWagerDisplay;
+
 /**
  * Confirm wager and start MONLUCK
  */
@@ -800,9 +809,13 @@ async function confirmWager() {
   // Set the wager amount in monluck game
   monluckGame.wager = currentWagerAmount * 100; // Convert to internal units
   
-  // For MONAD mode, this will be handled when the game ends
+  console.log(`Starting MONLUCK with wager: ${currentWagerAmount} MON`);
+  
+  // Start the game immediately (fix for blank screen issue)
   gameState = "monluck";
-  resetMonluckGame();
+  resetMonluckGame(); // This should now work with our added function
+  
+  console.log("MONLUCK game state set and reset completed");
 }
 
 // Make functions globally available
@@ -842,8 +855,24 @@ function closeWalletModal() {
   }
 }
 
-// Make functions available globally for HTML onclick handlers
-window.connectMetaMask = connectMetaMask;
+/**
+ * Simulate wallet connection for testing (debug function)
+ * This allows testing MONAD mode features without actual wallet
+ */
+function simulateWalletConnection() {
+  walletConnection.isConnected = true;
+  walletConnection.address = "0x1234567890123456789012345678901234567890"; // Mock address
+  walletConnection.provider = { isMockProvider: true };
+  walletConnection.providerType = 'metamask';
+  walletConnection.balance = "10.500"; // Mock balance
+  
+  console.log("Simulated wallet connection for testing");
+  alert(`Simulated wallet connected: ${getShortAddress(walletConnection.address)}`);
+  return true;
+}
+
+// Make simulate function available globally for testing
+window.simulateWalletConnection = simulateWalletConnection;
 window.connectWalletConnect = connectWalletConnect;
 window.closeWalletModal = closeWalletModal;
 window.disconnectWallet = disconnectWallet;
@@ -909,11 +938,17 @@ async function connectMetaMask() {
         await initializeBlockchain();
       }
       
+      // Update wallet balance for display
+      if (typeof updateWalletBalance !== 'undefined') {
+        await updateWalletBalance();
+      }
+      
       // Refresh buttons to show withdraw button if on leaderboard
       if (gameState === "leaderboard") {
         setupButtons();
       }
       
+      alert(`Connected to MetaMask: ${getShortAddress(accounts[0])}`);
       return true;
     }
     return false;
@@ -982,6 +1017,7 @@ function handleWalletDisconnect() {
   walletConnection.address = null;
   walletConnection.provider = null;
   walletConnection.providerType = null;
+  walletConnection.balance = "0.000"; // Reset balance display
 }
 
 /**
@@ -2313,6 +2349,14 @@ function startMonluckGame() {
   // monluckGame.showSplash = true;     // REMOVED - no more splash screens
   // monluckGame.splashTimer = 40;      // REMOVED - no more splash screens
   // monluckGame.splashMsg = "MONLUCK"; // REMOVED - no more splash screens
+}
+
+/**
+ * Reset MONLUCK game to initial state
+ * This function was missing and was causing blank screen issues
+ */
+function resetMonluckGame() {
+  startMonluckGame(); // Use existing startMonluckGame logic for reset
 }
 
 // --- BATTLE LOGIC ---
@@ -4300,6 +4344,29 @@ function drawVersionNumber() {
   ctx.fillText(GAME_VERSION, 20, HEIGHT - 20);
 }
 
+// --- WALLET BALANCE DISPLAY ---
+/**
+ * Draw wallet balance in top-right corner when wallet is connected
+ * This provides persistent, unobtrusive display as requested
+ */
+function drawWalletBalance() {
+  if (walletConnection.isConnected && walletConnection.address) {
+    ctx.font = "14px Arial";
+    ctx.fillStyle = "#4CAF50"; // Green color for balance
+    ctx.textAlign = "right";
+    
+    // Display balance with wallet icon
+    const balanceText = `💰 ${walletConnection.balance} MON`;
+    ctx.fillText(balanceText, WIDTH - 20, 30);
+    
+    // Display shortened wallet address below balance
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "#888";
+    const shortAddress = getShortAddress(walletConnection.address);
+    ctx.fillText(shortAddress, WIDTH - 20, 50);
+  }
+}
+
 // --- MAIN DRAW LOOP ---
 function draw() {
   if (gameState === "loading") {
@@ -4330,6 +4397,9 @@ function draw() {
   // Update and draw user feedback
   updateUserFeedback();
   drawUserFeedback();
+  
+  // Draw wallet balance on all pages when connected
+  drawWalletBalance();
 }
 // --- GAME LOOP ---
 function gameLoop() {
