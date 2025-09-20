@@ -99,3 +99,9 @@ canvas {
 .wallet-disconnect:hover {
   background: #ff5252;
 }
+
+/* Blockchain loading spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
