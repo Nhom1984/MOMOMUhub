@@ -162,6 +162,30 @@ let walletConnection = {
   providerType: null // 'metamask' or 'walletconnect'
 };
 
+// Make walletConnection globally accessible
+window.walletConnection = walletConnection;
+
+// Wallet balance cache for display
+let walletBalance = "0";
+
+// Function to update wallet balance display
+async function updateWalletBalance() {
+  if (walletConnection.isConnected && typeof getWalletBalance !== 'undefined') {
+    try {
+      const balance = await getWalletBalance();
+      walletBalance = balance;
+    } catch (error) {
+      console.error("Failed to update wallet balance:", error);
+      walletBalance = "0";
+    }
+  } else {
+    walletBalance = "0";
+  }
+}
+
+// Make updateWalletBalance globally accessible
+window.updateWalletBalance = updateWalletBalance;
+
 // --- LEADERBOARD STATE ---
 let leaderboard = {
   currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu, monluck, battle
@@ -803,6 +827,7 @@ async function confirmWager() {
   // For MONAD mode, this will be handled when the game ends
   gameState = "monluck";
   resetMonluckGame();
+  startMonluckGame();
 }
 
 // Make functions globally available
@@ -909,6 +934,9 @@ async function connectMetaMask() {
         await initializeBlockchain();
       }
       
+      // Update wallet balance display
+      await updateWalletBalance();
+      
       // Refresh buttons to show withdraw button if on leaderboard
       if (gameState === "leaderboard") {
         setupButtons();
@@ -947,6 +975,9 @@ async function connectWalletConnect() {
     walletConnection.address = demoAddress;
     walletConnection.provider = { isWalletConnect: true }; // Demo provider
     walletConnection.providerType = 'walletconnect';
+    
+    // Update wallet balance display
+    await updateWalletBalance();
     
     closeWalletModal();
     return true;
@@ -2470,7 +2501,8 @@ function drawMenu() {
   ctx.textAlign = "right";
   if (walletConnection.isConnected) {
     const providerIcon = walletConnection.providerType === 'metamask' ? '🦊' : '🔗';
-    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 45);
+    const balanceFormatted = parseFloat(walletBalance) > 0 ? ` (${parseFloat(walletBalance).toFixed(3)} MON)` : '';
+    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}${balanceFormatted}`, WIDTH - 35, HEIGHT - 45);
   } else {
     ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
   }
@@ -2496,7 +2528,8 @@ function drawModeMenu() {
   ctx.textAlign = "right";
   if (walletConnection.isConnected) {
     const providerIcon = walletConnection.providerType === 'metamask' ? '🦊' : '🔗';
-    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}`, WIDTH - 35, HEIGHT - 45);
+    const balanceFormatted = parseFloat(walletBalance) > 0 ? ` (${parseFloat(walletBalance).toFixed(3)} MON)` : '';
+    ctx.fillText(`${providerIcon} ${getShortAddress(walletConnection.address)}${balanceFormatted}`, WIDTH - 35, HEIGHT - 45);
   } else {
     ctx.fillText("Wallet: Not Connected", WIDTH - 35, HEIGHT - 45);
   }

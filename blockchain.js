@@ -158,6 +158,12 @@ async function handleWeeklyGameBuyIn(gameMode, buyInAmount) {
         
         hideBlockchainLoading();
         alert(`Successfully bought into ${gameMode}! Transaction: ${tx.hash.substring(0, 10)}...`);
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
+        
         return true;
         
     } catch (error) {
@@ -203,6 +209,12 @@ async function handleBattleEntry() {
         console.log("Battle entry confirmed:", receipt);
         
         hideBlockchainLoading();
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
+        
         return true;
         
     } catch (error) {
@@ -265,6 +277,11 @@ async function handleMonluckWager(wagerAmount, monadsHit) {
             if (parseFloat(payoutAmount) > 0) {
                 alert(`MONLUCK WIN! You earned ${payoutAmount} MON! Check your balance to withdraw.`);
             }
+        }
+        
+        // Update wallet balance after transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
         }
         
         return true;
@@ -333,6 +350,11 @@ async function withdrawWinnings() {
         
         hideBlockchainLoading();
         alert(`Successfully withdrew ${pendingAmount} MON! Transaction: ${tx.hash.substring(0, 10)}...`);
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
         
         return true;
         
@@ -448,6 +470,26 @@ function formatMON(amount) {
     return `${num.toFixed(3)} MON`;
 }
 
+/**
+ * Get wallet balance in MON
+ * @returns {Promise<string>} Balance in MON format
+ */
+async function getWalletBalance() {
+    // Access walletConnection from global scope
+    if (!window.walletConnection || !window.walletConnection.isConnected || !blockchain.provider) {
+        return "0";
+    }
+    
+    try {
+        const address = blockchain.userAddress || window.walletConnection.address;
+        const balance = await blockchain.provider.getBalance(address);
+        return ethers.utils.formatEther(balance);
+    } catch (error) {
+        console.error("Failed to get wallet balance:", error);
+        return "0";
+    }
+}
+
 // Initialize blockchain when wallet connects
 async function onWalletConnected() {
     if (walletConnection.isConnected) {
@@ -465,6 +507,7 @@ window.getPendingWithdrawal = getPendingWithdrawal;
 window.withdrawWinnings = withdrawWinnings;
 window.getTournamentInfo = getTournamentInfo;
 window.formatMON = formatMON;
+window.getWalletBalance = getWalletBalance;
 window.onWalletConnected = onWalletConnected;
 
 console.log("Blockchain integration loaded");
