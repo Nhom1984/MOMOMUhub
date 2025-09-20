@@ -72,28 +72,13 @@ const BUY_IN_AMOUNTS = {
  */
 async function initializeBlockchain() {
     try {
-        // Check if walletConnection is available (defined in memomu.js)
-        if (typeof walletConnection === 'undefined') {
-            console.log("WalletConnection not available");
-            return false;
-        }
-
         // Check if wallet is connected
         if (!walletConnection.isConnected || !walletConnection.provider) {
             console.log("Wallet not connected, blockchain features disabled");
             return false;
         }
 
-        // Handle mock provider for testing
-        if (walletConnection.provider.isMockProvider) {
-            console.log("Mock provider detected, simulating blockchain initialization");
-            blockchain.connected = true;
-            blockchain.userAddress = walletConnection.address;
-            blockchain.network = { name: "monad-testnet", chainId: 9000 };
-            return true;
-        }
-
-        // Initialize ethers provider for real wallet
+        // Initialize ethers provider
         if (typeof window.ethereum !== 'undefined') {
             blockchain.provider = new ethers.providers.Web3Provider(window.ethereum);
             blockchain.signer = blockchain.provider.getSigner();
@@ -131,17 +116,6 @@ async function initializeBlockchain() {
  * @returns {boolean} True if blockchain is ready
  */
 function isBlockchainReady() {
-    // Check if walletConnection is available
-    if (typeof walletConnection === 'undefined') {
-        return false;
-    }
-    
-    // For mock provider, just check if connected
-    if (walletConnection.provider && walletConnection.provider.isMockProvider) {
-        return walletConnection.isConnected;
-    }
-    
-    // For real blockchain, check full setup
     return blockchain.connected && blockchain.contract && walletConnection.isConnected;
 }
 
@@ -158,23 +132,6 @@ async function handleWeeklyGameBuyIn(gameMode, buyInAmount) {
     }
 
     try {
-        // Handle mock provider for testing
-        if (typeof walletConnection !== 'undefined' && walletConnection.provider && walletConnection.provider.isMockProvider) {
-            console.log(`Mock buy-in: ${gameMode} - ${buyInAmount} MON`);
-            showBlockchainLoading("Processing buy-in...");
-            
-            // Simulate transaction delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Update mock balance
-            const currentBalance = parseFloat(walletConnection.balance);
-            walletConnection.balance = (currentBalance - parseFloat(buyInAmount)).toFixed(3);
-            
-            hideBlockchainLoading();
-            alert(`Mock buy-in successful! ${buyInAmount} MON for ${gameMode}`);
-            return true;
-        }
-
         const gameModeId = GAME_MODES[gameMode];
         if (gameModeId === undefined || gameModeId > 2) {
             throw new Error("Invalid game mode for weekly tournament");
@@ -229,19 +186,6 @@ async function handleBattleEntry() {
     }
 
     try {
-        // Handle mock provider for testing
-        if (walletConnection.provider && walletConnection.provider.isMockProvider) {
-            console.log("Mock battle entry with 1.0 MON");
-            showBlockchainLoading("Processing battle entry...");
-            
-            // Simulate transaction delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            hideBlockchainLoading();
-            alert("Mock battle entry successful! 1.0 MON");
-            return true;
-        }
-
         const battleBuyIn = ethers.utils.parseEther(BUY_IN_AMOUNTS.BATTLE);
         
         console.log("Entering battle with 1.0 MON");
@@ -287,26 +231,6 @@ async function handleMonluckWager(wagerAmount, monadsHit) {
     }
 
     try {
-        // Handle mock provider for testing
-        if (walletConnection.provider && walletConnection.provider.isMockProvider) {
-            console.log(`Mock MONLUCK wager: ${wagerAmount} MON, hit ${monadsHit} monads`);
-            showBlockchainLoading("Processing MONLUCK wager...");
-            
-            // Simulate transaction delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            hideBlockchainLoading();
-            
-            // Simulate payout based on monads hit
-            if (monadsHit >= 4) {
-                const payout = parseFloat(wagerAmount) * (monadsHit === 5 ? 5 : 2);
-                alert(`MONLUCK WIN! You earned ${payout} MON! (Mock transaction)`);
-            } else if (monadsHit >= 2) {
-                alert(`MONLUCK partial win! ${monadsHit} monads found (Mock transaction)`);
-            }
-            return true;
-        }
-
         const wagerWei = ethers.utils.parseEther(wagerAmount);
         
         console.log(`MONLUCK wager: ${wagerAmount} MON, hit ${monadsHit} monads`);
@@ -513,36 +437,6 @@ function hideBlockchainLoading() {
 }
 
 /**
- * Get user's wallet balance
- * @returns {Promise<string>} Balance in MON format
- */
-async function getUserBalance() {
-    if (!isBlockchainReady()) {
-        return "0.000";
-    }
-
-    try {
-        const balance = await blockchain.provider.getBalance(blockchain.userAddress);
-        const balanceInEth = ethers.utils.formatEther(balance);
-        const balanceNum = parseFloat(balanceInEth);
-        return balanceNum.toFixed(3);
-    } catch (error) {
-        console.error("Error fetching balance:", error);
-        return "0.000";
-    }
-}
-
-/**
- * Update wallet balance display
- * Call this periodically or after transactions
- */
-async function updateWalletBalance() {
-    if (typeof walletConnection !== 'undefined' && walletConnection.isConnected) {
-        walletConnection.balance = await getUserBalance();
-    }
-}
-
-/**
  * Format MON amount for display
  * @param {string} amount - Amount in ETH
  * @returns {string} Formatted amount
@@ -556,7 +450,7 @@ function formatMON(amount) {
 
 // Initialize blockchain when wallet connects
 async function onWalletConnected() {
-    if (typeof walletConnection !== 'undefined' && walletConnection.isConnected) {
+    if (walletConnection.isConnected) {
         await initializeBlockchain();
     }
 }
@@ -572,7 +466,5 @@ window.withdrawWinnings = withdrawWinnings;
 window.getTournamentInfo = getTournamentInfo;
 window.formatMON = formatMON;
 window.onWalletConnected = onWalletConnected;
-window.getUserBalance = getUserBalance;
-window.updateWalletBalance = updateWalletBalance;
 
 console.log("Blockchain integration loaded");
