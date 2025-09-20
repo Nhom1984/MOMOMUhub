@@ -183,6 +183,9 @@ async function updateWalletBalance() {
   }
 }
 
+// Make updateWalletBalance globally accessible
+window.updateWalletBalance = updateWalletBalance;
+
 // --- LEADERBOARD STATE ---
 let leaderboard = {
   currentTab: "musicMemory", // musicMemory, memoryClassic, memoryMemomu, monluck, battle

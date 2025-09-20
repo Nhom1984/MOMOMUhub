@@ -158,6 +158,12 @@ async function handleWeeklyGameBuyIn(gameMode, buyInAmount) {
         
         hideBlockchainLoading();
         alert(`Successfully bought into ${gameMode}! Transaction: ${tx.hash.substring(0, 10)}...`);
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
+        
         return true;
         
     } catch (error) {
@@ -203,6 +209,12 @@ async function handleBattleEntry() {
         console.log("Battle entry confirmed:", receipt);
         
         hideBlockchainLoading();
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
+        
         return true;
         
     } catch (error) {
@@ -265,6 +277,11 @@ async function handleMonluckWager(wagerAmount, monadsHit) {
             if (parseFloat(payoutAmount) > 0) {
                 alert(`MONLUCK WIN! You earned ${payoutAmount} MON! Check your balance to withdraw.`);
             }
+        }
+        
+        // Update wallet balance after transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
         }
         
         return true;
@@ -333,6 +350,11 @@ async function withdrawWinnings() {
         
         hideBlockchainLoading();
         alert(`Successfully withdrew ${pendingAmount} MON! Transaction: ${tx.hash.substring(0, 10)}...`);
+        
+        // Update wallet balance after successful transaction
+        if (typeof window.updateWalletBalance === 'function') {
+            await window.updateWalletBalance();
+        }
         
         return true;
         
