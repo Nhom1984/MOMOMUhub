@@ -846,7 +846,6 @@ async function confirmWager() {
   
   // For MONAD mode, this will be handled when the game ends
   gameState = "monluck";
-  resetMonluckGame();
   startMonluckGame();
 }
 
