@@ -71,6 +71,25 @@
     </div>
   </div>
 
+  <!-- Battle Confirmation Modal -->
+  <div id="battleConfirmModal" class="wallet-modal" style="display: none;">
+    <div class="wallet-modal-content">
+      <h2>Battle Mode Entry</h2>
+      <div style="margin: 20px 0; color: #666; font-size: 14px;">
+        You are about to enter Battle Mode. This will cost 1.0 MON from your wallet.
+      </div>
+      <div style="font-size: 20px; margin: 15px 0; color: #4CAF50; font-weight: bold;">
+        Entry Fee: 1.0 MON
+      </div>
+      <button class="wallet-option" onclick="confirmBattleEntry()">
+        ⚔️ Play for 1.0 MON
+      </button>
+      <button class="wallet-option wallet-close" onclick="closeBattleConfirmModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
   <!-- Blockchain Loading Indicator -->
   <div id="blockchain-loading" class="wallet-modal" style="display: none;">
     <div class="wallet-modal-content">

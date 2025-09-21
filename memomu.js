@@ -759,13 +759,15 @@ function closeBuyInModal() {
  * Handle buy-in selection
  */
 async function selectBuyIn(amount) {
+  // Store game mode before closing modal
+  const gameMode = currentGameModeForBuyIn;
   closeBuyInModal();
   
-  if (currentGameModeForBuyIn && typeof handleWeeklyGameBuyIn !== 'undefined') {
-    const success = await handleWeeklyGameBuyIn(currentGameModeForBuyIn, amount);
+  if (gameMode && typeof handleWeeklyGameBuyIn !== 'undefined') {
+    const success = await handleWeeklyGameBuyIn(gameMode, amount);
     if (success) {
       // Proceed to game rules/start
-      switch(currentGameModeForBuyIn) {
+      switch(gameMode) {
         case 'musicMemory':
           gameState = "musicmem_rules";
           break;
@@ -779,7 +781,6 @@ async function selectBuyIn(amount) {
       }
     }
   }
-  currentGameModeForBuyIn = null;
 }
 
 // --- WAGER MODAL FUNCTIONS ---
@@ -792,8 +793,19 @@ function showWagerModal() {
     return;
   }
   
-  document.getElementById('wagerModal').style.display = 'flex';
-  updateWagerDisplay();
+  const modal = document.getElementById('wagerModal');
+  const slider = document.getElementById('wagerSlider');
+  
+  if (modal && slider) {
+    modal.style.display = 'flex';
+    
+    // Ensure slider event listener is attached and working
+    slider.removeEventListener('input', updateWagerDisplay); // Remove any existing listener
+    slider.addEventListener('input', updateWagerDisplay); // Add fresh listener
+    
+    // Initialize display with current slider value
+    updateWagerDisplay();
+  }
 }
 
 /**
@@ -811,7 +823,15 @@ function updateWagerDisplay() {
   const display = document.getElementById('wagerDisplay');
   if (slider && display) {
     currentWagerAmount = parseFloat(slider.value);
-    display.textContent = `${currentWagerAmount} MON`;
+    display.textContent = `${currentWagerAmount.toFixed(1)} MON`;
+    
+    // Visual feedback for wager changes
+    display.style.color = '#4CAF50';
+    display.style.fontWeight = 'bold';
+    setTimeout(() => {
+      display.style.color = '';
+      display.style.fontWeight = '';
+    }, 200);
   }
 }
 
@@ -826,8 +846,44 @@ async function confirmWager() {
   
   // For MONAD mode, this will be handled when the game ends
   gameState = "monluck";
-  resetMonluckGame();
   startMonluckGame();
+}
+
+// --- BATTLE CONFIRMATION MODAL FUNCTIONS ---
+/**
+ * Shows battle confirmation modal
+ */
+function showBattleConfirmModal() {
+  if (!walletConnection.isConnected) {
+    alert("Please connect your wallet first");
+    return;
+  }
+  
+  document.getElementById('battleConfirmModal').style.display = 'flex';
+}
+
+/**
+ * Closes battle confirmation modal
+ */
+function closeBattleConfirmModal() {
+  document.getElementById('battleConfirmModal').style.display = 'none';
+}
+
+/**
+ * Confirm battle entry and start transaction
+ */
+async function confirmBattleEntry() {
+  closeBattleConfirmModal();
+  
+  if (typeof handleBattleEntry !== 'undefined') {
+    const success = await handleBattleEntry();
+    if (success) {
+      gameState = "battle"; 
+      resetBattleGame();
+    }
+  } else {
+    alert("Blockchain not ready. Please try again.");
+  }
 }
 
 // Make functions globally available
@@ -837,6 +893,9 @@ window.selectBuyIn = selectBuyIn;
 window.showWagerModal = showWagerModal;
 window.closeWagerModal = closeWagerModal;
 window.confirmWager = confirmWager;
+window.showBattleConfirmModal = showBattleConfirmModal;
+window.closeBattleConfirmModal = closeBattleConfirmModal;
+window.confirmBattleEntry = confirmBattleEntry;
 
 // Update wager display when slider changes
 document.addEventListener('DOMContentLoaded', function() {
@@ -927,6 +986,9 @@ async function connectMetaMask() {
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('disconnect', handleWalletDisconnect);
       
+      // Update wallet balance display immediately after connection
+      await updateWalletBalance();
+      
       closeWalletModal();
       
       // Initialize blockchain if in MONAD mode
@@ -992,16 +1054,19 @@ async function connectWalletConnect() {
  * Handles wallet account changes
  * @param {string[]} accounts - Array of account addresses
  */
-function handleAccountsChanged(accounts) {
+async function handleAccountsChanged(accounts) {
   if (accounts.length === 0) {
     // User disconnected
     walletConnection.isConnected = false;
     walletConnection.address = null;
     walletConnection.provider = null;
     walletConnection.providerType = null;
+    walletBalance = "0";
   } else {
     // User switched accounts
     walletConnection.address = accounts[0];
+    // Update balance for new account
+    await updateWalletBalance();
   }
 }
 
@@ -1013,6 +1078,7 @@ function handleWalletDisconnect() {
   walletConnection.address = null;
   walletConnection.provider = null;
   walletConnection.providerType = null;
+  walletBalance = "0"; // Reset balance when disconnected
 }
 
 /**
@@ -3535,17 +3601,8 @@ canvas.addEventListener("click", function (e) {
       }
       
       if (playMode === "monad") {
-        // For battle mode, handle buy-in directly
-        if (typeof handleBattleEntry !== 'undefined') {
-          handleBattleEntry().then(success => {
-            if (success) {
-              gameState = "battle"; 
-              resetBattleGame();
-            }
-          });
-        } else {
-          alert("Blockchain not ready. Please try again.");
-        }
+        // For battle mode, show confirmation modal first instead of immediately triggering wallet
+        showBattleConfirmModal();
       } else {
         gameState = "battle"; 
         resetBattleGame();
